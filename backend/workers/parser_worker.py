@@ -3,7 +3,7 @@ import json
 from app.infrastructure.queue.celery_app import celery_app
 from app.infrastructure.db.session import SessionLocal
 from app.infrastructure.db.models import Session, Conversation
-
+from workers.event_extractor_worker import extract_events_task
 
 @celery_app.task(name="parse_session", bind=True, max_retries=3, default_retry_delay=10)
 def parse_session(self, session_id: str):
@@ -38,7 +38,7 @@ def parse_session(self, session_id: str):
 
         db.commit()
         db.refresh(conversation)
-
+        extract_events_task.delay(conversation.id)
         return conversation.id
 
     except Exception as exc:

@@ -6,7 +6,7 @@ celery_app = Celery(
     "devmind",
     broker = settings.redis_url,
     backend = settings.redis_url,
-    include = ["workers.hello_world_worker","workers.parser_worker"],
+    include = ["workers.hello_world_worker","workers.parser_worker","workers.event_extractor_worker","workers.memory_worker"],
 )
 
 celery_app.conf.update(
