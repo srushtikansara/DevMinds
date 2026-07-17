@@ -3,6 +3,7 @@ from app.infrastructure.db.session import SessionLocal
 from app.infrastructure.db.models import Conversation, Session, DeveloperEvent
 from app.infrastructure.llm.gemini_provider import extract_events
 from workers.memory_worker import process_memory
+from workers.skill_worker import process_skills
 
 
 @celery_app.task(name="extract_events", bind=True, max_retries=3, default_retry_delay=10)
@@ -50,6 +51,7 @@ def extract_events_task(self, conversation_id: str):
         for db_event in created_events:
             db.refresh(db_event)
             process_memory.delay(db_event.id)
+            process_skills.delay(db_event.id)
 
         return len(created_events)
 

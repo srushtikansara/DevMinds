@@ -7,3 +7,13 @@ raw_sessions/
 backend/test_conversation_filtered.py
 backend/test_real_conversation.py
 backend/test_gemini.py
+check_cursor_fresh.py
+check_remaining_keys.py
+decode_protobuf.py
+decode_protobuf_deep.py
+inspect_antigravity*.py
+recheck_antigravity.py
+test_*.py
+*.vscdb
+*.vscdb-wal
+*.vscdb-shm
