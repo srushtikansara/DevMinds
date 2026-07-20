@@ -8,8 +8,9 @@ from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel
 
 from app.infrastructure.db.session import get_db
-from app.infrastructure.db.models import Session as SessionModel, Connector, User
-
+from app.infrastructure.db.models import Session as SessionModel, Connector, User , Memory
+from app.infrastructure.embeddings.gemini_embeddings import get_embedding 
+from app.infrastructure.vectorstore.chroma_client import find_similar
 from workers.parser_worker import parse_session
 
 router = APIRouter()
@@ -81,3 +82,31 @@ def upload_session(body: SessionUploadRequest, db: DBSession = Depends(get_db)):
         return {"session_id": existing.id, "status": existing.status}
 
     return {"session_id": session.id, "status": "queued"}
+
+@router.get("/memories/search")
+def search_name(q:str ,db: DBSession = Depends(get_db)):
+    if not q or not q.strip():
+        raise HTTPException(400,"Query cannot be empty")
+    if len(q) > 500:
+        raise HTTPException(422,"Query too long (500 max characters)")
+    
+    query_vector = get_embedding(q,task_type = "RETRIEVAL_QUERY")
+    
+    matches=find_similar(query_vector, top_k=5)
+    
+    results = []
+    
+    for match in matches:
+        memory = db.query(Memory).filter(Memory.id == match["memory_id"]).first()
+        if memory is None:
+            continue
+        
+        similarity = 1 - match["distance"]
+        results.append({
+                "memory_id":memory.id,
+                 "content": memory.content,
+                "importance_score": memory.importance_score,
+                "similarity": round(similarity, 3),
+            })
+        results.sort(key = lambda r: (r["similarity"]*0.7 + r["importance_score"] *0.3),reverse=True)
+        return {"query": q, "results": results}
