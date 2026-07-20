@@ -16,7 +16,7 @@ router = APIRouter()
 RAW_SESSIONS_DIR = "raw_sessions"
 os.makedirs(RAW_SESSIONS_DIR, exist_ok=True)
 
-VALID_TOOL_TYPES = {"claude_code", "cursor", "codex"}
+VALID_TOOL_TYPES = {"claude_code", "cursor", "codex","antigravity"}
 
 
 class SessionUploadRequest(BaseModel):

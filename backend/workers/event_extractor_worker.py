@@ -4,7 +4,8 @@ from app.infrastructure.db.models import Conversation, Session, DeveloperEvent
 from app.infrastructure.llm.gemini_provider import extract_events
 from workers.memory_worker import process_memory
 from workers.skill_worker import process_skills
-
+from workers.profile_worker import update_developer_profile
+from workers.recommendation_worker import generate_recommendation
 
 @celery_app.task(name="extract_events", bind=True, max_retries=3, default_retry_delay=10)
 def extract_events_task(self, conversation_id: str):
@@ -52,7 +53,8 @@ def extract_events_task(self, conversation_id: str):
             db.refresh(db_event)
             process_memory.delay(db_event.id)
             process_skills.delay(db_event.id)
-
+            update_developer_profile.delay(session.user_id)
+            generate_recommendation.delay(session.user_id)
         return len(created_events)
 
     except Exception as exc:
