@@ -11,6 +11,9 @@ from app.infrastructure.db.session import get_db
 from app.infrastructure.db.models import Session as SessionModel, Connector, User , Memory
 from app.infrastructure.embeddings.gemini_embeddings import get_embedding 
 from app.infrastructure.vectorstore.chroma_client import find_similar
+from app.infrastructure.db.models import DeveloperProfile,WeeklyReport
+
+from datetime import date
 from workers.parser_worker import parse_session
 
 router = APIRouter()
@@ -84,29 +87,74 @@ def upload_session(body: SessionUploadRequest, db: DBSession = Depends(get_db)):
     return {"session_id": session.id, "status": "queued"}
 
 @router.get("/memories/search")
-def search_name(q:str ,db: DBSession = Depends(get_db)):
+def search_name(q: str, db: DBSession = Depends(get_db)):
     if not q or not q.strip():
-        raise HTTPException(400,"Query cannot be empty")
+        raise HTTPException(400, "Query cannot be empty")
     if len(q) > 500:
-        raise HTTPException(422,"Query too long (500 max characters)")
-    
-    query_vector = get_embedding(q,task_type = "RETRIEVAL_QUERY")
-    
-    matches=find_similar(query_vector, top_k=5)
-    
+        raise HTTPException(422, "Query too long (500 max characters)")
+
+    query_vector = get_embedding(q, task_type="RETRIEVAL_QUERY")
+
+    matches = find_similar(query_vector, top_k=10)
+
     results = []
-    
+
     for match in matches:
-        memory = db.query(Memory).filter(Memory.id == match["memory_id"]).first()
+        try:
+            memory = db.query(Memory).filter(Memory.id == match["memory_id"]).first()
+        except Exception:
+            db.rollback()
+            continue  
+
         if memory is None:
             continue
-        
+
         similarity = 1 - match["distance"]
         results.append({
-                "memory_id":memory.id,
-                 "content": memory.content,
-                "importance_score": memory.importance_score,
-                "similarity": round(similarity, 3),
-            })
-        results.sort(key = lambda r: (r["similarity"]*0.7 + r["importance_score"] *0.3),reverse=True)
-        return {"query": q, "results": results}
+            "memory_id": memory.id,
+            "content": memory.content,
+            "importance_score": memory.importance_score,
+            "similarity": round(similarity, 3),
+        })
+
+    results.sort(key=lambda r: (r["similarity"] * 0.7 + r["importance_score"] * 0.3), reverse=True)
+    return {"query": q, "results": results}
+
+@router.get("/profile")
+def get_profile(db: DBSession = Depends(get_db)):
+    user = db.query(User).first()
+    if user is None:
+        raise HTTPException(404, "No user exists yet")
+
+    profile = db.query(DeveloperProfile).filter(DeveloperProfile.user_id == user.id).first()
+    if profile is None:
+        raise HTTPException(404, "Profile not yet computed - upload at least one session first")
+
+    return {
+        "user_id": profile.user_id,
+        "skill_summary": profile.skill_summary,
+        "activity_summary": profile.activity_summary,
+        "last_computed_at": profile.last_computed_at,
+    }
+    
+@router.get("/reports/{week_start}")
+def get_weekly_report(week_start: date, db: DBSession = Depends(get_db)):
+    user = db.query(User).first()
+    if user is None:
+        raise HTTPException(404,"No user exists yet")
+    
+    report= (
+        db.query(WeeklyReport)
+        .filter(WeeklyReport.user_id == user.id, WeeklyReport.week_start == week_start)
+        .first()
+    )
+    
+    if report is None:
+        raise HTTPException(404, f"No report generated for week starting {week_start}")
+
+    return {
+        "week_start": report.week_start,
+        "report_storage_uri": report.report_storage_uri,
+        "summary_json": report.summary_json,
+        "generated_at": report.generated_at,
+    }
