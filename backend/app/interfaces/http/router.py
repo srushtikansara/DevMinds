@@ -12,6 +12,7 @@ from app.infrastructure.db.models import Session as SessionModel, Connector, Use
 from app.infrastructure.embeddings.gemini_embeddings import get_embedding 
 from app.infrastructure.vectorstore.chroma_client import find_similar
 from app.infrastructure.db.models import DeveloperProfile,WeeklyReport
+from app.interfaces.http.auth import get_current_user
 
 from datetime import date
 from workers.parser_worker import parse_session
@@ -31,7 +32,7 @@ class SessionUploadRequest(BaseModel):
 
 
 @router.post("/sessions", status_code=202)
-def upload_session(body: SessionUploadRequest, db: DBSession = Depends(get_db)):
+def upload_session(body: SessionUploadRequest, user: User = Depends(get_current_user) ,db: DBSession = Depends(get_db)):
 
     if body.tool_type not in VALID_TOOL_TYPES:
         raise HTTPException(400, f"tool_type must be one of {sorted(VALID_TOOL_TYPES)}")
@@ -43,10 +44,6 @@ def upload_session(body: SessionUploadRequest, db: DBSession = Depends(get_db)):
     )
     if existing:
         return {"session_id": existing.id, "status": existing.status}
-
-    user = db.query(User).first()
-    if user is None:
-        raise HTTPException(500, "No user exists yet - create a dev user first")
 
     connector = (
         db.query(Connector)
@@ -87,7 +84,7 @@ def upload_session(body: SessionUploadRequest, db: DBSession = Depends(get_db)):
     return {"session_id": session.id, "status": "queued"}
 
 @router.get("/memories/search")
-def search_name(q: str, db: DBSession = Depends(get_db)):
+def search_name(q: str, user: User = Depends(get_current_user) ,db: DBSession = Depends(get_db)):
     if not q or not q.strip():
         raise HTTPException(400, "Query cannot be empty")
     if len(q) > 500:
@@ -121,11 +118,7 @@ def search_name(q: str, db: DBSession = Depends(get_db)):
     return {"query": q, "results": results}
 
 @router.get("/profile")
-def get_profile(db: DBSession = Depends(get_db)):
-    user = db.query(User).first()
-    if user is None:
-        raise HTTPException(404, "No user exists yet")
-
+def get_profile(user: User = Depends(get_current_user),db: DBSession = Depends(get_db)):
     profile = db.query(DeveloperProfile).filter(DeveloperProfile.user_id == user.id).first()
     if profile is None:
         raise HTTPException(404, "Profile not yet computed - upload at least one session first")
@@ -138,11 +131,8 @@ def get_profile(db: DBSession = Depends(get_db)):
     }
     
 @router.get("/reports/{week_start}")
-def get_weekly_report(week_start: date, db: DBSession = Depends(get_db)):
-    user = db.query(User).first()
-    if user is None:
-        raise HTTPException(404,"No user exists yet")
-    
+def get_weekly_report( week_start: date,user: User = Depends(get_current_user) , db: DBSession = Depends(get_db)):
+   
     report= (
         db.query(WeeklyReport)
         .filter(WeeklyReport.user_id == user.id, WeeklyReport.week_start == week_start)

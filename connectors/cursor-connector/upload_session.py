@@ -1,10 +1,15 @@
 import sys
+sys.path.insert(0, r"C:\Users\Srushti\Desktop\DevMind\backend")
+
 import json
 import sqlite3
 import shutil
 import requests
 from pathlib import Path
 from datetime import datetime,timezone
+
+from app.config import settings
+
 
 API_URL = "http://localhost:8000/api/v1/sessions"
 
@@ -63,6 +68,7 @@ def parse_cursor_db(db_path:str) ->list[dict]:
     return sessions
 
 def upload_session(composer_id: str, turns: list[dict]):
+    headers = {"Authorization": f"Bearer {settings.devmind_api_key}"}
     payload = {
         "session_upload_id": f"cursor-{composer_id}",
         "tool_type": "cursor",
@@ -70,7 +76,7 @@ def upload_session(composer_id: str, turns: list[dict]):
         "payload": {"turns": turns},
     }
 
-    response = requests.post(API_URL, json=payload)
+    response = requests.post(API_URL, json=payload,headers=headers)
     print(f"[{composer_id}] {len(turns)} turns - Status: {response.status_code}")
     print("Raw response text:", response.text[:1000])
     

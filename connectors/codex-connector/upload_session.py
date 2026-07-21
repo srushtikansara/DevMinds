@@ -1,8 +1,12 @@
 import sys
+sys.path.insert(0, r"C:\Users\Srushti\Desktop\DevMind\backend")
+
 import json
 import requests
 from pathlib import Path
 from datetime import datetime,timezone
+from app.config import settings
+
 
 API_URL="http://localhost:8000/api/v1/sessions"
 
@@ -51,6 +55,7 @@ def parser_codex_jsonl(file_path: str) -> list[dict]:
     return turns
 
 def upload_session(file_path:str , session_id:str):
+    headers = {"Authorization": f"Bearer {settings.devmind_api_key}"}
     turns=parser_codex_jsonl(file_path)
     print(f"Parsed {len(turns)} real conversation turns from {file_path}")
     
@@ -61,7 +66,7 @@ def upload_session(file_path:str , session_id:str):
         "payload": {"turns": turns},
     }
     
-    response = requests.post(API_URL,json=payload)
+    response = requests.post(API_URL,json=payload,headers=headers)
     print(f"Status: {response.status_code}")
     print(response.json())
 

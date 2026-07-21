@@ -1,10 +1,12 @@
 import sys
+sys.path.insert(0, r"C:\Users\Srushti\Desktop\DevMind\backend")
+
 import json
 import uuid
 from pathlib import Path
 from datetime import datetime, timezone
-
 import requests
+from app.config import settings
 
 API_URL = "http://localhost:8000/api/v1/sessions"
 def parse_claude_code_jsonl(filepath: str) -> list[dict]:
@@ -41,7 +43,7 @@ def parse_claude_code_jsonl(filepath: str) -> list[dict]:
     return turns
 
 def upload_session(filepath:str, session_id:str) :
-    
+    headers = {"Authorization": f"Bearer {settings.devmind_api_key}"}
     turns = parse_claude_code_jsonl(filepath)
     print(f"Parsed {len(turns)} real conversations with {filepath}")
     
@@ -52,7 +54,7 @@ def upload_session(filepath:str, session_id:str) :
         "payload": {"turns":turns},
     }
     
-    response = requests.post(API_URL,json=payload)
+    response = requests.post(API_URL,json=payload,headers=headers)
     print(f"Status: {response.status_code}")
     print(response.json())
     
