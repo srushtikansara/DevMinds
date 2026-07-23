@@ -8,12 +8,13 @@ from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel
 
 from app.infrastructure.db.session import get_db
-from app.infrastructure.db.models import Session as SessionModel, Connector, User , Memory
+from app.infrastructure.db.models import Session as SessionModel, Connector, User , Memory,Recommendation,CareerRecommendation,JobPosting
 from app.infrastructure.embeddings.gemini_embeddings import get_embedding 
 from app.infrastructure.vectorstore.chroma_client import find_similar
 from app.infrastructure.db.models import DeveloperProfile,WeeklyReport
 from app.interfaces.http.auth import get_current_user
-
+from workers.resume_worker import generate_resume
+from fastapi.responses import FileResponse
 from datetime import date
 from workers.parser_worker import parse_session
 
@@ -30,7 +31,28 @@ class SessionUploadRequest(BaseModel):
     started_at: datetime
     payload: dict
 
+class RoleInput(BaseModel):
+    title: str
+    context: str
+    start_date: str
+    end_date: str = "Present"
 
+
+class EducationInput(BaseModel):
+    degree: str
+    institution: str
+    graduation_date: str
+
+
+class ResumeGenerationRequest(BaseModel):
+    full_name: str
+    email: str
+    phone: str = ""
+    linkedin_url: str = ""
+    portfolio_url: str = ""
+    education: list[EducationInput]
+    roles: list[RoleInput]
+    
 @router.post("/sessions", status_code=202)
 def upload_session(body: SessionUploadRequest, user: User = Depends(get_current_user) ,db: DBSession = Depends(get_db)):
 
@@ -148,3 +170,99 @@ def get_weekly_report( week_start: date,user: User = Depends(get_current_user) ,
         "summary_json": report.summary_json,
         "generated_at": report.generated_at,
     }
+
+@router.get("/resumes/{resume_id}/download")
+def download_resume(resume_id:str,user: User =Depends(get_current_user)):
+    file_path = f"generated_resumes/resume_{resume_id}.docx"
+    if not os.path.exists(file_path):
+        raise HTTPException(404, "Resume file not found")
+    return FileResponse(file_path, filename="resume.docx", media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
+@router.post("/resumes/generate",status_code=202)
+def request_resume_generation(
+    body: ResumeGenerationRequest,
+    user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    task = generate_resume.delay(user.id, body.model_dump())
+    return {"status": "queued", "task_id": task.id}
+
+
+@router.get("/recommendations")
+def get_recommendations(user:User = Depends(get_current_user), db: DBSession = Depends(get_db)):
+    recommendations = (
+        db.query(Recommendation)
+        .filter(Recommendation.user_id == user.id, Recommendation.actioned == False)
+        .order_by(Recommendation.relevance_score.desc())
+        .all()
+    )
+    return {
+        "recommendations": [
+            {"content": r.content, "relevance_score": r.relevance_score, "type": r.type}
+            for r in recommendations
+        ]
+    }
+    
+@router.get("/career/matches")
+def get_career_matches(user: User = Depends(get_current_user), db:DBSession = Depends(get_db)):
+    
+    matches = (
+        db.query(CareerRecommendation,JobPosting)
+        .join(JobPosting,CareerRecommendation.job_postings_id == JobPosting.id)
+        .filter(CareerRecommendation.user_id == user.id)
+        .order_by(CareerRecommendation.fit_score.desc())
+        .all()
+    )
+    
+    return{
+        "matches":[
+           {
+            "title":posting.title,
+            "company":posting.company,
+            "location": posting.location,
+            "url": posting.url,
+            "fit_score": rec.fit_score,
+            "fit_reason": rec.fit_reason,
+           }
+           for rec , posting in matches
+        ]
+    }
+    
+@router.post("/career/matches/{recommendation_id}/prepare")
+def prepare_application(recommendation_id:str,user: User= Depends(get_current_user),db: DBSession = Depends(get_db)):
+    recommendation = (
+        db.query(CareerRecommendation)
+        .filter(CareerRecommendation.id == recommendation_id,CareerRecommendation.user_id == user.id)
+        .first()    
+    )
+    if recommendation is None:
+        raise HTTPException(404,"Recommendation not found")
+    
+    recommendation.reviewed =True
+    db.commit()
+    
+    posting = db.query(JobPosting).filter(JobPosting.id == recommendation.job_postings_id).first()
+    
+    return  {
+        "status": "reviewed",
+        "jon_title": posting.title,
+        "company":posting.company,
+        "apply_url":posting.url,
+        "note": "Resume tailoring for this specific job will be added in a future step",
+        
+    }
+    
+@router.post("/career/matches/{recommendation_id}/mark-applied")
+def mark_applied(recommendation_id, user: User = Depends(get_current_user),db: DBSession = Depends(get_db)):
+    recommendation = (
+        db.query(CareerRecommendation)
+        .filter(CareerRecommendation.id == recommendation_id , CareerRecommendation.user_id == user.id)
+        .first()
+    )
+    if recommendation is None:
+        raise HTTPException(404,"Recommendation not found")
+    
+    recommendation.reviewed =True
+    db.commit()
+    
+    return{"status":"marked as applied"}
