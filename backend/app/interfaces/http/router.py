@@ -306,4 +306,36 @@ def upload_resume(
     
     return {"resume_id": resume.id, "status": "uploaded", "text_length": len(extracted_text)}
     
-        
+@router.get("/resumes")
+def list_resumes(user:User = Depends(get_current_user),db:DBSession =Depends(get_db)):
+    resumes = (
+        db.query(Resume)
+        .filter(Resume.user_id==user.id)
+        .order_by(Resume.created_at.desc())
+        .all()
+    )   
+    
+    return {
+        "resumes": [
+            {
+                "id": r.id,
+                "source":r.source,
+                "version": r.version,
+                "created_at": r.created_at,
+            }
+            for r in resumes
+        ]
+    }   
+
+@router.get("/resumes/{resume_id}")
+def get_resume_detail(resume_id:str, user:User = Depends(get_current_user),db: DBSession = Depends(get_db)):
+    resume = db.query(Resume).filter(Resume.id == resume_id,  Resume.user_id == user.id).first()
+    if resume is None:
+        raise HTTPException(404,"Resume not found")
+    
+    return {"id": resume.id,
+        "source": resume.source,
+        "version": resume.version,
+        "content_json": resume.content_json,
+        "created_at": resume.created_at,
+    }
