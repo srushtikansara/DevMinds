@@ -1,14 +1,16 @@
 from datetime import datetime
 import json
 import os
+import shutil
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi import UploadFile,File
 from sqlalchemy.orm import Session as DBSession
 from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel
 
 from app.infrastructure.db.session import get_db
-from app.infrastructure.db.models import Session as SessionModel, Connector, User , Memory,Recommendation,CareerRecommendation,JobPosting
+from app.infrastructure.db.models import Session as SessionModel, Connector, User , Memory,Recommendation,CareerRecommendation,JobPosting,Resume
 from app.infrastructure.embeddings.gemini_embeddings import get_embedding 
 from app.infrastructure.vectorstore.chroma_client import find_similar
 from app.infrastructure.db.models import DeveloperProfile,WeeklyReport
@@ -21,6 +23,8 @@ from workers.parser_worker import parse_session
 router = APIRouter()
 RAW_SESSIONS_DIR = "raw_sessions"
 os.makedirs(RAW_SESSIONS_DIR, exist_ok=True)
+UPLOADED_RESUMES_DIR = "uploaded_resumes"
+os.makedirs(UPLOADED_RESUMES_DIR, exist_ok=True)
 
 VALID_TOOL_TYPES = {"claude_code", "cursor", "codex","antigravity"}
 
@@ -266,3 +270,40 @@ def mark_applied(recommendation_id, user: User = Depends(get_current_user),db: D
     db.commit()
     
     return{"status":"marked as applied"}
+
+@router.post("/resumes/upload",status_code=201)
+def upload_resume(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
+    if not file.filename.lower().endswith((".pdf",".docx")):
+        raise HTTPException(422,"Only .pdf and .docx files are supported")
+    
+    from app.infrastructure.documents.resume_parser import extract_resume_text
+    
+    saved_path = os.path.join(UPLOADED_RESUMES_DIR,file.filename)
+    with open(saved_path,"wb") as f:
+        shutil.copyfileobj(file.file,f)
+    
+    try:
+        extracted_text = extract_resume_text(saved_path,file.filename)
+    except Exception as e:
+        raise HTTPException(422, f"Could not parse file: {str(e)}")
+
+    if not extracted_text.strip():
+        raise HTTPException(422,"No readable text found in the uploaded file")
+    
+    resume = Resume(
+        user_id = user.id,
+        content_json = {"raw_text": extracted_text},
+        source="uploaded",
+        version=1
+    )
+    db.add(resume)
+    db.commit()
+    db.refresh(resume)
+    
+    return {"resume_id": resume.id, "status": "uploaded", "text_length": len(extracted_text)}
+    
+        
