@@ -14,6 +14,7 @@ from app.infrastructure.db.models import Session as SessionModel, Connector, Use
 from app.infrastructure.embeddings.gemini_embeddings import get_embedding 
 from app.infrastructure.vectorstore.chroma_client import find_similar
 from app.infrastructure.db.models import DeveloperProfile,WeeklyReport
+from app.infrastructure.llm.gemini_provider import tailor_resume_for_job
 from app.interfaces.http.auth import get_current_user
 from workers.resume_worker import generate_resume
 from fastapi.responses import FileResponse
@@ -206,32 +207,7 @@ def get_recommendations(user:User = Depends(get_current_user), db: DBSession = D
             for r in recommendations
         ]
     }
-    
-    
-@router.post("/career/matches/{recommendation_id}/prepare")
-def prepare_application(recommendation_id:str,user: User= Depends(get_current_user),db: DBSession = Depends(get_db)):
-    recommendation = (
-        db.query(CareerRecommendation)
-        .filter(CareerRecommendation.id == recommendation_id,CareerRecommendation.user_id == user.id)
-        .first()    
-    )
-    if recommendation is None:
-        raise HTTPException(404,"Recommendation not found")
-    
-    recommendation.reviewed =True
-    db.commit()
-    
-    posting = db.query(JobPosting).filter(JobPosting.id == recommendation.job_postings_id).first()
-    
-    return  {
-        "status": "reviewed",
-        "jon_title": posting.title,
-        "company":posting.company,
-        "apply_url":posting.url,
-        "note": "Resume tailoring for this specific job will be added in a future step",
-        
-    }
-    
+
 @router.post("/career/matches/{recommendation_id}/mark-applied")
 def mark_applied(recommendation_id, user: User = Depends(get_current_user),db: DBSession = Depends(get_db)):
     recommendation = (
@@ -359,3 +335,57 @@ def get_career_matches(user:User = Depends(get_current_user),db:DBSession = Depe
             for rec, posting in matches
         ]
     }
+    
+@router.post("/career/matches/{recommendation_id}/prepare")
+def prepare_application(recommendation_id: str, user: User= Depends(get_current_user),db: DBSession = Depends(get_db)):
+    recommedation = (
+        db.query(CareerRecommendation)
+        .filter(CareerRecommendation.id == recommendation_id, CareerRecommendation.user_id == user.id)
+        .first()
+    )
+    if recommedation is None:
+        raise HTTPException(404,"Recommendation not found")
+    
+    posting = db.query(JobPosting).filter(JobPosting.id == recommedation.job_postings_id).first()
+    
+    base_resume=(
+        db.query(Resume)
+        .filter(Resume.user_id == user.id ,Resume.source == "generated")
+        .order_by(Resume.created_at.desc())
+        .first()
+    )
+    
+    if base_resume is None:
+        raise HTTPException(400, "No base resume - generate a resume first before preparing an application")
+    
+    tailored_content = tailor_resume_for_job(
+        base_resume_content = base_resume.content_json,
+        job_title=posting.title,
+        job_description=posting.description
+    )
+    
+    tailored_resume = Resume(
+        user_id = user.id,
+        content_json = tailored_content,
+        source = "tailored",
+        version = 1      
+    )
+    
+    db.add(tailored_resume)
+    
+    recommedation.reviewed = True
+    db.commit()
+    db.refresh(tailored_resume)
+    
+    return {
+        "status":"reviewed",
+        "job_title": posting.title,
+        "company": posting.company,
+        "apply_url" : posting.url,
+        "tailored_resume_id": tailored_resume.id,
+        "tailored_summary": tailored_content["summary"],
+        "highlighted_skills": tailored_content["highlighted_skills"],
+        "tailoring_notes":tailored_content["tailoring_notes"],
+    }
+    
+    
