@@ -17,3 +17,4 @@ class CareerRecommendation(Base):
     reviewed = Column(Boolean,nullable=False)
     created_at = Column(DateTime(timezone=True),default=lambda:datetime.now(timezone.utc))
     applied = Column(Boolean,default=False)
+    rejected = Column(Boolean,default=False)

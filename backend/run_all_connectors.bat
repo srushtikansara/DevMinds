@@ -28,3 +28,4 @@ for /d %%d in ("%USERPROFILE%\.gemini\antigravity-ide\brain\*") do (
         python ..\connectors\antigravity-connector\upload_session.py "%%d\.system_generated\logs\transcript.jsonl"
     )
 )
+

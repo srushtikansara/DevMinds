@@ -4,13 +4,15 @@ from app.config import settings
 ACTOR_ID = "worldunboxer~rapid-linkedin-scraper"
 
 
-def search_jobs(job_titles: list[str], location: str = "India", limit: int = 5) -> list[dict]:
+def search_jobs(job_titles: list[str], location: str = "India", limit: int = 10) -> list[dict]:
     url = f"https://api.apify.com/v2/acts/{ACTOR_ID}/run-sync-get-dataset-items"
     params = {"token": settings.apify_api_token}
     payload = {
-        "jobTitles": job_titles,
+        "jobs_titles": job_titles,
         "location": location,
-        "maxResults": limit,
+        "jobs_entries": limit,
+        "employment_type": "Internship",
+        "experience": "Intern",
     }
 
     response = requests.post(url, params=params, json=payload)
@@ -27,5 +29,4 @@ def search_jobs(job_titles: list[str], location: str = "India", limit: int = 5) 
             "description": job.get("job_description", ""),
             "url": job.get("apply_url", job.get("job_url", "")),
         })
-
     return normalized

@@ -4,8 +4,7 @@ from app.infrastructure.queue.celery_app import celery_app
 from app.infrastructure.db.session import SessionLocal
 from app.infrastructure.db.models import DeveloperProfile, JobPosting, CareerRecommendation
 from app.infrastructure.jobs.apify_linkedin_client import search_jobs
-from app.infrastructure.llm.gemini_provider import score_job_fit
-
+from app.infrastructure.llm.gemini_provider import score_jobs_batches
 
 @celery_app.task(name="find_job_matches", bind=True, max_retries=3, default_retry_delay=10)
 def find_job_matches(self, user_id: str):
@@ -15,12 +14,17 @@ def find_job_matches(self, user_id: str):
         if profile is None:
             return 0
 
-        job_titles = ["Data Scientist Intern", "Machine Learning Engineer Intern", "Business Analyst Intern"]
+        job_titles = ["Data Scientist Intern", "Machine Learning Engineer Intern"]
         raw_jobs = search_jobs(job_titles)
-        time.sleep(13)
+
+        if not raw_jobs:
+            return 0
+
+        job_descriptions = [job["description"] for job in raw_jobs]
+        fit_results = score_jobs_batches(profile.skill_summary, job_descriptions)
 
         created_count = 0
-        for job in raw_jobs:
+        for job, fit in zip(raw_jobs, fit_results):
             posting = db.query(JobPosting).filter(JobPosting.external_id == job["external_id"]).first()
 
             if posting is None:
@@ -38,16 +42,11 @@ def find_job_matches(self, user_id: str):
 
             existing_rec = (
                 db.query(CareerRecommendation)
-                .filter(
-                    CareerRecommendation.user_id == user_id,
-                    CareerRecommendation.job_postings_id == posting.id,
-                )
+                .filter(CareerRecommendation.user_id == user_id, CareerRecommendation.job_postings_id == posting.id)
                 .first()
             )
             if existing_rec:
                 continue
-
-            fit = score_job_fit(profile.skill_summary, posting.description)
 
             recommendation = CareerRecommendation(
                 user_id=user_id,

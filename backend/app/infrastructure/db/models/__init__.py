@@ -10,5 +10,8 @@ from app.infrastructure.db.models.conversation import Conversation
 from app.infrastructure.db.models.developer_event import DeveloperEvent
 from app.infrastructure.db.models.recommendation import Recommendation
 from app.infrastructure.db.models.weekly_report import WeeklyReport
-__all__ = ["User","Connector","Session","Embedding","DeveloperProfile","Conversation","DeveloperEvent","SkillSignal","Skill","Memory","Recommendation","WeeklyReport"]
+from app.infrastructure.db.models.resume import Resume
+from app.infrastructure.db.models.job_posting import JobPosting
+from app.infrastructure.db.models.career_recommendation import CareerRecommendation
+__all__ = ["User","Connector","Session","Embedding","DeveloperProfile","Conversation","DeveloperEvent","SkillSignal","Skill","Memory","Recommendation","WeeklyReport","Resume","JobPosting","CareerRecommendation"]
 

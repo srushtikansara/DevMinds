@@ -7,6 +7,7 @@ raw_sessions/
 backend/test_conversation_filtered.py
 backend/test_real_conversation.py
 backend/test_gemini.py
+backend/generated_resumes/
 check_cursor_fresh.py
 check_remaining_keys.py
 decode_protobuf.py

@@ -27,5 +27,11 @@ def get_recommendations() -> dict:
     response = requests.get(f"{API_URL}/recommendations", headers=HEADERS)
     return response.json()
 
+@mcp.tool()
+def get_career_matches() -> dict:
+    """Get the user's current job/internship recommendations from real job postings, ranked by fit_score."""
+    response = requests.get(f"{API_URL}/career/matches",headers=HEADERS)
+    return response.json()
+
 if __name__=="__main__":
     mcp.run()
