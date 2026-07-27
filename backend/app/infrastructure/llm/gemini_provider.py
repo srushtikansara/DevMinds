@@ -1,7 +1,7 @@
 import json
 from google import genai
 from app.config import settings
-
+from tenacity import retry, stop_after_attempt, wait_fixed
 client = genai.Client(api_key=settings.gemini_api_key)
 
 EVENT_SCHEMA = {
@@ -224,6 +224,7 @@ TAILORED_RESUME_SCHEMA = {
         "required": ["summary", "highlighted_skills", "tailoring_notes"],
     }
 
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(10))
 def tailor_resume_for_job(base_resume_content: dict, job_title: str, job_description: str, model: str = "gemini-3.5-flash"):
     
     if "raw_text" in base_resume_content:
@@ -262,3 +263,4 @@ genuine gaps between their background and this role's requirements.
         return json.loads(response.text)
     except json.JSONDecodeError:
         return {"summary": base_summary, "highlighted_skills": [], "tailoring_notes": ""}
+    
