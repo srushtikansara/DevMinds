@@ -208,21 +208,6 @@ def get_recommendations(user:User = Depends(get_current_user), db: DBSession = D
         ]
     }
 
-@router.post("/career/matches/{recommendation_id}/mark-applied")
-def mark_applied(recommendation_id, user: User = Depends(get_current_user),db: DBSession = Depends(get_db)):
-    recommendation = (
-        db.query(CareerRecommendation)
-        .filter(CareerRecommendation.id == recommendation_id , CareerRecommendation.user_id == user.id)
-        .first()
-    )
-    if recommendation is None:
-        raise HTTPException(404,"Recommendation not found")
-    
-    recommendation.reviewed =True
-    db.commit()
-    
-    return{"status":"marked as applied"}
-
 @router.post("/resumes/upload",status_code=201)
 def upload_resume(
     file: UploadFile = File(...),
@@ -387,5 +372,27 @@ def prepare_application(recommendation_id: str, user: User= Depends(get_current_
         "highlighted_skills": tailored_content["highlighted_skills"],
         "tailoring_notes":tailored_content["tailoring_notes"],
     }
+@router.post("/career/matches/{recommendation_id}/mark-applied")
+def mark_applied(recommendation_id:str , user: User = Depends(get_current_user),db: DBSession = Depends(get_db)):
+    recommendation = (
+        db.query(CareerRecommendation)
+        .filter(CareerRecommendation.id == recommendation_id, CareerRecommendation.user_id == user.id)
+        .first()
+    )
+    if recommendation is None:
+        raise HTTPException(404,"Recommendation not found")
     
+    if not recommendation.reviewed:
+        raise HTTPException(
+            400,
+            "This reommendation hasn't been prepared yet. Call /prepare first before marking is applied."
+        )
+    if recommendation.rejected:
+        raise HTTPException(
+            400,
+            "This recommendation was rejected - cannot mark a rejected job as applied."
+          )
+    recommendation.applied = True
+    db.commit()
     
+    return {"status": "marked as applied"}
