@@ -350,7 +350,7 @@ def prepare_application(recommendation_id: str, user: User= Depends(get_current_
     
     base_resume=(
         db.query(Resume)
-        .filter(Resume.user_id == user.id ,Resume.source == "generated")
+        .filter(Resume.user_id == user.id, Resume.source.in_(["generated","uploaded"]))
         .order_by(Resume.created_at.desc())
         .first()
     )
