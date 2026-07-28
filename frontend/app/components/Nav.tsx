@@ -8,6 +8,8 @@ const links = [
   { href: "/career", label: "Career matches" },
   { href: "/resumes", label: "Resumes" },
   { href: "/skills", label: "Skills" },
+  { href: "/reports", label: "Reports" },
+  {href: "/coach", label:"Coach"}
 ];
 
 export default function Nav(){

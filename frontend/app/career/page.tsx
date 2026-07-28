@@ -12,7 +12,7 @@ type Match = {
   fit_reason: string;
 };
 
-type PrepareResult= {
+type PrepareResult = {
   job_title: string;
   company: string;
   apply_url: string;
@@ -38,6 +38,8 @@ export default function CareerMatchesPage() {
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<string | null>(null);
   const [prepared, setPrepared] = useState<PrepareResult | null>(null);
+  const [preparedId, setPreparedId] = useState<string | null>(null);
+  const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
 
   async function loadMatches() {
     setLoading(true);
@@ -52,20 +54,41 @@ export default function CareerMatchesPage() {
 
   async function handlePrepare(id: string) {
     setActionId(id);
-    const result = await apiCall(`/career/matches/${id}/prepare`, "POST");
-    setPrepared(result);
+    try {
+      const result = await apiCall(`/career/matches/${id}/prepare`, "POST");
+      setPrepared(result);
+      setPreparedId(id);
+    } catch (err) {
+      alert("Couldn't prepare this application. Check the backend is running.");
+    }
     setActionId(null);
   }
 
   async function handleReject(id: string) {
     setActionId(id);
-    await apiCall(`/career/matches/${id}/reject`, "POST");
-    await loadMatches();
+    try {
+      await apiCall(`/career/matches/${id}/reject`, "POST");
+      await loadMatches();
+    } catch {
+      alert("Couldn't reject this match.");
+    }
     setActionId(null);
   }
 
+  async function handleMarkApplied() {
+    if (!preparedId) return;
+    setActionId(preparedId);
+    try {
+      await apiCall(`/career/matches/${preparedId}/mark-applied`, "POST");
+      setAppliedIds(new Set([...appliedIds, preparedId]));
+      setPrepared(null);
+    } catch {
+      alert("Couldn't mark as applied.");
+    }
+    setActionId(null);
+  }
 
-   return (
+  return (
     <main className="min-h-screen bg-[#0A0E14] text-[#E8EAED] px-8 py-12">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-2xl font-semibold mb-1">Career matches</h1>
@@ -95,16 +118,19 @@ export default function CareerMatchesPage() {
 
               <p className="text-sm text-[#8A9099] mb-4">{m.fit_reason}</p>
 
-              <div className="flex gap-2 text-sm">
+              <div className="flex gap-2 text-sm items-center">
                 <a href={m.url} target="_blank" className="px-3 py-1.5 rounded-md bg-[#4C8DFF] text-[#0A0E14] font-medium">
                   View posting
                 </a>
                 <button onClick={() => handlePrepare(m.id)} disabled={actionId === m.id} className="px-3 py-1.5 rounded-md border border-[#2A3038] text-[#E8EAED] disabled:opacity-50">
-                  {actionId === m.id ? "Preparing..." : "Prepare application"}
+                  {actionId === m.id ? "Working..." : "Prepare application"}
                 </button>
                 <button onClick={() => handleReject(m.id)} disabled={actionId === m.id} className="px-3 py-1.5 rounded-md border border-[#2A3038] text-[#8A9099] disabled:opacity-50">
                   Not interested
                 </button>
+                {appliedIds.has(m.id) && (
+                  <span className="text-xs text-[#4C8DFF] font-mono">✓ Applied</span>
+                )}
               </div>
             </div>
           ))}
@@ -134,6 +160,9 @@ export default function CareerMatchesPage() {
               <a href={prepared.apply_url} target="_blank" className="px-3 py-1.5 rounded-md bg-[#4C8DFF] text-[#0A0E14] font-medium text-sm">
                 Apply now
               </a>
+              <button onClick={handleMarkApplied} className="px-3 py-1.5 rounded-md border border-[#2A3038] text-sm">
+                Mark as applied
+              </button>
               <button onClick={() => setPrepared(null)} className="px-3 py-1.5 rounded-md border border-[#2A3038] text-sm">
                 Close
               </button>
