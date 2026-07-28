@@ -264,3 +264,19 @@ genuine gaps between their background and this role's requirements.
     except json.JSONDecodeError:
         return {"summary": base_summary, "highlighted_skills": [], "tailoring_notes": ""}
     
+def research_company(company_name: str, model: str = "gemini-3.5-flash") -> dict:
+    prompt = f"What does the company '{company_name}' actually do? Give a concise, 2-3 sentence summary of their business focus and any recent, notable news."
+
+    response = client.models.generate_content(
+        model=model,
+        contents=prompt,
+        config={
+            "tools": [{"google_search": {}}],
+        },
+    )
+
+    sources = []
+    if response.candidates[0].grounding_metadata:
+        sources = [chunk.web.uri for chunk in response.candidates[0].grounding_metadata.grounding_chunks]
+
+    return {"summary": response.text, "sources": sources}

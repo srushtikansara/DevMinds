@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     devmind_api_key: str = ""
     memory_merge_similarity_threshold: float = 0.92
     apify_api_token: str = ""
+    tavily_api_key: str = ""
 
     class Config:
         env_file = BASE_DIR / ".env"

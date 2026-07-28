@@ -7,6 +7,7 @@ from app.infrastructure.db.models import Resume,JobPosting,CareerRecommendation
 from app.infrastructure.llm.gemini_provider import tailor_resume_for_job
 from app.infrastructure.db.session import SessionLocal
 from app.infrastructure.llm.gemini_provider import research_company
+from agents.tools import research_company_web
 
 class CareerAgentState(TypedDict):
     recommendation_id:str
@@ -38,7 +39,7 @@ def research_company_node(state: CareerAgentState) -> CareerAgentState:
     posting = db.query(JobPosting).filter(JobPosting.id == rec.job_postings_id).first()
     db.close()
 
-    research = research_company(posting.company)
+    research = research_company_web(posting.company)
     state["company_research"] = research["summary"]
     state["decision_log"].append(f"Researched {posting.company} via grounded search")
     return state
@@ -84,7 +85,8 @@ def build_career_agent():
     graph.add_node("skip", skip_node)
     
     graph.add_edge(START, "fetch_job")
-    graph.add_conditional_edges("fetch_job", should_pursue,{"search_memory": "search_memory", "skip": "skip"})
+    graph.add_edge("fetch_job", "research_company")
+    graph.add_conditional_edges("research_company", should_pursue,{"search_memory": "search_memory", "skip": "skip"})
     graph.add_edge("search_memory","tailor")
     graph.add_edge("tailor",END)
     graph.add_edge("skip",END)
