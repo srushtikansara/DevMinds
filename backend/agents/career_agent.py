@@ -6,6 +6,7 @@ from app.infrastructure.vectorstore.chroma_client import find_similar
 from app.infrastructure.db.models import Resume,JobPosting,CareerRecommendation
 from app.infrastructure.llm.gemini_provider import tailor_resume_for_job
 from app.infrastructure.db.session import SessionLocal
+from app.infrastructure.llm.gemini_provider import research_company
 
 class CareerAgentState(TypedDict):
     recommendation_id:str
@@ -16,6 +17,8 @@ class CareerAgentState(TypedDict):
     similar_past_work: Optional[str]
     tailored_summary: Optional[str]
     decision_log: list[str]
+    company_search: Optional[str]
+    
     
 def fetch_job_node(state: CareerAgentState) -> CareerAgentState:
     db = SessionLocal()
@@ -27,6 +30,17 @@ def fetch_job_node(state: CareerAgentState) -> CareerAgentState:
     state['fit_score'] = rec.fit_score
     state['job_description'] = posting.description
     state["decision_log"].append(f"Fetched job: {posting.title}, fit_score={rec.fit_score}")
+    return state
+
+def research_company_node(state: CareerAgentState) -> CareerAgentState:
+    db = SessionLocal()
+    rec = db.query(CareerRecommendation).filter(CareerRecommendation.id == state["recommendation_id"]).first()
+    posting = db.query(JobPosting).filter(JobPosting.id == rec.job_postings_id).first()
+    db.close()
+
+    research = research_company(posting.company)
+    state["company_research"] = research["summary"]
+    state["decision_log"].append(f"Researched {posting.company} via grounded search")
     return state
 
 def should_pursue(state:CareerAgentState) -> CareerAgentState:
@@ -64,6 +78,7 @@ def skip_node(state:CareerAgentState) -> CareerAgentState:
 def build_career_agent():
     graph = StateGraph(CareerAgentState)
     graph.add_node("fetch_job", fetch_job_node)
+    graph.add_node("research_company", research_company_node)
     graph.add_node("search_memory", search_memory_node)
     graph.add_node("tailor", tailor_node)
     graph.add_node("skip", skip_node)
