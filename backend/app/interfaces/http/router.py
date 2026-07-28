@@ -396,3 +396,25 @@ def mark_applied(recommendation_id:str , user: User = Depends(get_current_user),
     db.commit()
     
     return {"status": "marked as applied"}
+
+@router.get("/career/applied")
+def get_applied_jobs(user: User = Depends(get_current_user), db: DBSession = Depends(get_db)):
+    matches = (
+        db.query(CareerRecommendation, JobPosting)
+        .join(JobPosting, CareerRecommendation.job_postings_id == JobPosting.id)
+        .filter(CareerRecommendation.user_id == user.id, CareerRecommendation.applied == True)
+        .order_by(CareerRecommendation.created_at.desc())
+        .all()
+    )
+    return {
+        "applied": [
+            {
+                "title": posting.title,
+                "company": posting.company,
+                "location": posting.location,
+                "url": posting.url,
+                "fit_score": rec.fit_score,
+            }
+            for rec, posting in matches
+        ]
+    }

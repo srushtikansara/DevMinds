@@ -9,7 +9,8 @@ const links = [
   { href: "/resumes", label: "Resumes" },
   { href: "/skills", label: "Skills" },
   { href: "/reports", label: "Reports" },
-  {href: "/coach", label:"Coach"}
+  {href: "/coach", label:"Coach"},
+  { href: "/applied", label: "Applied" }
 ];
 
 export default function Nav(){
