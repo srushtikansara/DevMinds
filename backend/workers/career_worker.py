@@ -2,9 +2,12 @@ from datetime import datetime, timezone
 import time
 from app.infrastructure.queue.celery_app import celery_app
 from app.infrastructure.db.session import SessionLocal
-from app.infrastructure.db.models import DeveloperProfile, JobPosting, CareerRecommendation
+from app.infrastructure.db.models import DeveloperProfile, JobPosting, CareerRecommendation ,Recommendation
 from app.infrastructure.jobs.apify_linkedin_client import search_jobs
 from app.infrastructure.llm.gemini_provider import score_jobs_batches
+from workers.agent_worker import run_career_agent
+
+
 
 @celery_app.task(name="find_job_matches", bind=True, max_retries=3, default_retry_delay=10)
 def find_job_matches(self, user_id: str):
@@ -59,8 +62,19 @@ def find_job_matches(self, user_id: str):
             created_count += 1
 
         db.commit()
+        if created_count > 0:
+            top_recommendation = (
+                db.query(CareerRecommendation)
+                .filter(CareerRecommendation.user_id == user_id, CareerRecommendation.rejected == False)
+                .order_by(CareerRecommendation.fit_score.desc())
+                .first()
+    )
+            if top_recommendation:
+                run_career_agent.delay(top_recommendation.id, user_id)
+
         return created_count
 
+        
     except Exception as exc:
         db.rollback()
         raise self.retry(exc=exc)

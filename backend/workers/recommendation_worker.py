@@ -4,6 +4,7 @@ from app.infrastructure.queue.celery_app import celery_app
 from app.infrastructure.db.session import SessionLocal
 from app.infrastructure.db.models import Skill, Recommendation
 from app.infrastructure.llm.gemini_provider import recommend_next_skills
+from workers.agent_worker import run_learning_agent
 
 
 @celery_app.task(name="generate_recommendation", bind=True, max_retries=3, default_retry_delay=10)
@@ -57,6 +58,16 @@ def generate_recommendation(self, user_id: str):
             created_counts += 1
 
         db.commit()
+                        
+        if created_counts > 0:
+            top_rec = (
+                db.query(Recommendation)
+                .filter(Recommendation.user_id == user_id)
+                .order_by(Recommendation.relevance_score.desc())
+                .first()
+            )
+            if top_rec:
+                run_learning_agent.delay(user_id, top_rec.content)
         return created_counts
 
     except Exception as exc:
