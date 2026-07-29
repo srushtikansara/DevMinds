@@ -33,18 +33,20 @@ export default function ResumesPage() {
 
   const [education, setEducation] = useState<Education[]>([{ degree: "", institution: "", graduation_date: "" }]);
   const [roles, setRoles] = useState<Role[]>([{ title: "", context: "", start_date: "", end_date: "Present" }]);
+  const displayResumes = resumes.filter((r) => r.source !== "tailored");
 
   async function loadResumes() {
     setLoading(true);
     const data = await apiCall("/resumes");
     setResumes(data.resumes);
     setLoading(false);
+    
   }
 
   useEffect(() => {
     loadResumes();
   }, []);
-
+  
   async function handleDownload(resumeId: string) {
     const res = await fetch(`${API_URL}/resumes/${resumeId}/download`, {
       headers: { Authorization: `Bearer ${API_KEY}` },
@@ -215,21 +217,24 @@ export default function ResumesPage() {
 
         <h2 className="font-medium mb-3">Your resumes</h2>
         {loading && <p className="text-[#8A9099]">Loading...</p>}
-        <div className="space-y-2">
-          {resumes.map((r) => (
-            <div key={r.id} className="border border-[#1C2128] rounded-lg p-4 flex justify-between items-center">
-              <div>
-                <p className="font-mono text-sm text-[#4C8DFF] uppercase">{r.source}</p>
-                <p className="text-xs text-[#8A9099]">v{r.version} · {new Date(r.created_at).toLocaleDateString()}</p>
-              </div>
-              {r.source === "generated" && (
-                <button onClick={() => handleDownload(r.id)} className="text-sm px-3 py-1.5 rounded-md border border-[#2A3038]">
-                  Download
-                </button>
-              )}
-            </div>
-          ))}
+       <div className="space-y-2">
+        {displayResumes.map((r) => (
+        <div key={r.id} className="border border-[#1C2128] rounded-lg p-4 flex justify-between items-center">
+          <div>
+            <p className="font-mono text-sm text-[#4C8DFF] uppercase">{r.source}</p>
+            <p className="text-xs text-[#8A9099]">v{r.version} · {new Date(r.created_at).toLocaleDateString()}</p>
+          </div>
+        {r.source === "generated" && (
+          <button onClick={() => handleDownload(r.id)} className="text-sm px-3 py-1.5 rounded-md border border-[#2A3038]">
+            Download
+          </button>
+        )}
         </div>
+        ))}
+        {!loading && displayResumes.length === 0 && (
+  <p className="text-[#8A9099]">No resumes yet. Upload one above.</p>
+)}
+      </div>
       </div>
     </main>
   );
