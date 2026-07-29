@@ -1,208 +1,179 @@
-# Technology Stack — As Built
+# DevMind — Cross-AI Developer Intelligence Platform
 
-> This document reflects the actual, implemented and tested technology stack, as it stands today. Where a decision diverges from the original plan (`17_Technology_Stack.md`), the reason is documented — each divergence was a deliberate, evidence-based choice made during development, not an oversight.
-
----
-
-## Backend
-
-### FastAPI
-
-Purpose
-- REST APIs for all DevMind functionality
-- Session ingestion, memory search, career matching, resume management
-
-Status: ✅ Implemented as planned
+> A production-ready platform that transforms AI-assisted developer interactions into persistent knowledge, developer intelligence, and personalized learning and career insights.
 
 ---
 
-## Frontend
+## Overview
 
-### Not yet built
+Modern developers use multiple AI tools — Claude Code, Codex, Cursor, Antigravity, and more — throughout their development workflow. These interactions remain fragmented: each tool remembers nothing beyond its own session, so context, decisions, and learning are lost the moment a conversation ends.
 
-Originally planned: Next.js + React
-
-Status: ⏳ Deliberately deferred — built the complete backend first, dashboard is the next major phase
+**DevMind** solves this by automatically capturing real sessions from your AI coding tools, extracting meaningful developer events, building long-term memory, tracking technical skills, and generating personalized recommendations — all without you doing anything beyond your normal work.
 
 ---
 
-## Database
+## What's actually working (validated on real data)
 
-### PostgreSQL
+### 1. Automatic capture — four connectors, fully working
+- **Claude Code** — reads local `.jsonl` session files
+- **Codex** — reads local `.jsonl` session files (filters reasoning/tool-call noise)
+- **Cursor** — reads its local SQLite database (`state.vscdb`), resolves composer headers to bubble records
+- **Antigravity IDE** — reads local JSONL transcripts (`transcript.jsonl`)
 
-Purpose: Store structured data
+Each connector parses real session data end to end, filtering internal bookkeeping and keeping only genuine conversation turns.
 
-Stores (as actually implemented)
-- Users, Connectors, Sessions, Conversations
-- DeveloperEvents, Memories, Embeddings (pointers)
-- SkillSignals, Skills, DeveloperProfiles
-- Recommendations, WeeklyReports
-- Resumes (generated, uploaded, and tailored)
-- JobPostings, CareerRecommendations
+### 2. The core pipeline — six automatic stages
+Uploading a session triggers this chain automatically, no manual steps required:
 
-Status: ✅ Implemented as planned, 14 real tables in production use
+```
+Upload → Parse → Extract Events (Gemini) → Memory Engine → Skill Tracking → Developer Profile → Recommendations (Gemini)
+```
 
----
+- **Parse** — turns raw payloads into structured conversation turns
+- **Extract Events** — Gemini identifies distinct debugging/learning/implementation/architecture-decision events
+- **Memory Engine** — embeds each event (Gemini embeddings + ChromaDB), merges into existing memory or creates new memory based on a strict 0.92 similarity threshold
+- **Skill Tracking** — rolls events into per-skill proficiency scores using a diminishing-returns formula
+- **Developer Profile** — rebuilds a per-user summary (top skills + recent highlights) after every session
+- **Recommendations** — Gemini reasons across the user's full skill combination to suggest genuinely relevant next technologies (not a hardcoded lookup table)
 
-## Vector Database
+### 3. Semantic memory search
+`GET /memories/search?q=...` — ask "have I solved this before?" in plain language. Embeds the query, searches ChromaDB, blends semantic similarity with memory importance for ranking.
 
-### ChromaDB
+### 4. Weekly reports
+Aggregates the current week's memories, active skills, and open recommendations into a single summary, stored per `(user, week_start)`.
 
-Purpose: Semantic search over developer memories
+### 5. Authentication
+Every endpoint and every connector requires a real API key (`Authorization: Bearer <key>`), hashed and checked against the user record — no hardcoded dev-user shortcuts remain.
 
-Stores: Memory embeddings, used for merge/create decisions and semantic search
+### 6. Career Intelligence (in progress)
+- **Resume generation** — working. Converts real skill/memory data plus structured personal info (contact, education, dated roles) into professional, ATS-oriented resume content via Gemini, rendered as a downloadable `.docx`.
+- **Resume upload path** — not yet built (planned: accept an existing resume file for users who don't want auto-generation).
+- **Job matching** — designed, not yet built. Real, legitimate free job-data sources identified: Himalayas, Arbeitnow, RemoteOK, Remotive (all zero-setup), Adzuna, Jooble, Careerjet, The Muse, Reed. LinkedIn, Indeed, Naukri, Internshala, and Glassdoor confirmed to have **no free official APIs** — only paid or ToS-risky scraping options exist, which this project deliberately avoids.
+- **Human-in-the-loop by design** — DevMind will prepare (search, score fit, tailor resume) but never auto-submit an application. Every submission requires explicit user action.
 
-Status: ✅ Implemented as planned
+### 7. MCP server — Claude Desktop integration
+A local MCP server exposes `get_developer_profile`, `search_memories`, and `get_recommendations` as tools Claude Desktop can call directly in conversation, authenticated via the same API key. Read-only — it never writes back into DevMind.
 
----
-
-## Cache / Queue
-
-### Redis
-
-Purpose: Celery broker
-
-Status: ✅ Implemented as planned
-
----
-
-## Background Processing
-
-### Celery
-
-Purpose (as actually implemented)
-- Session parsing, event extraction
-- Memory processing, skill tracking
-- Developer profile updates, recommendations
-- Weekly report generation, resume generation
-- Career/job matching
-
-Status: ✅ Implemented as planned — 10 registered tasks, chained automatically stage-to-stage
+### 8. Automation
+`run_all_connectors.bat` starts Docker, the API, and Celery, then runs all four connectors against every local session file found. Scheduled nightly via Windows Task Scheduler — the entire capture pipeline runs unattended.
 
 ---
 
-## AI Framework
+## Architecture
 
-### LangGraph
+- **PostgreSQL** — primary store: users, connectors, sessions, conversations, developer events, memories, embeddings (pointers), skill signals, skills, developer profiles, recommendations, weekly reports, resumes, job postings, career recommendations
+- **ChromaDB** — vector store for memory embeddings, enabling semantic search and merge/create decisions
+- **Redis + Celery** — background task queue; every pipeline stage after upload runs as an independent, automatically-triggered Celery task
+- **Gemini (`gemini-3.5-flash`)** — used for event extraction, embeddings, skill recommendations, and resume content generation, all via JSON Schema–constrained structured output
+- **FastAPI** — REST API, all endpoints behind API-key authentication
 
-Purpose: Agentic, multi-step reasoning with real conditional branching
+### Why Gemini instead of a local model
+A documented experiment (Ollama, multiple local models) found that local models reliably followed the JSON schema on short conversations but became unreliable on long, real conversations — inventing formats or returning empty results. Gemini handled the same real data correctly on the first attempt. See `docs/devmind-mvp-plan.md` for the full experiment log.
 
-Implemented as a learning exercise, built on top of the existing production pipeline:
-- `career_agent.py` — fetches a real job recommendation, branches on fit_score (≥0.4 searches memory and tailors a resume; below skips), demonstrating genuine conditional routing over live data
-- `learning_agent.py` — fetches a real skill's signal_count, branches on whether it's a new skill or an existing one, searches related memories, generates a tailored learning plan, and checks live job-market demand for that skill
-
-Status: ✅ Implemented — both agents tested successfully against real production data (real fit scores, real skill signal counts, real job postings)
-
----
-
-## LLM
-
-### Gemini (gemini-3.5-flash)
-
-Used for: event extraction, embeddings-adjacent reasoning, skill recommendations, resume generation and tailoring, job fit-scoring (batched)
-
-**Deviation from original plan (Ollama, MVP):** A documented experiment tested multiple local Ollama models (llama3.2:3b, llama3.1:8b) against Gemini on real, long conversations. Local models reliably followed the required JSON schema on short test inputs but became unreliable — inventing formats, returning empty results, or echoing unrelated prior context — on real, multi-turn conversations. Gemini handled the same real data correctly on the first attempt. Full experiment log preserved in `docs/devmind-mvp-plan.md`.
-
-**Known constraint:** Free tier limited to 20 requests/day per model — a real, hit constraint during development (documented, with batching implemented as a direct mitigation for the job fit-scoring feature specifically).
-
-Status: ✅ Implemented, with real-world reliability data backing the choice
+### A note on "why isn't this chat captured?"
+Connectors work because Claude Code, Codex, Cursor, and Antigravity IDE each write a local session file automatically. A conversation in a web/desktop chat interface (Claude Desktop's regular chat, ChatGPT, or this conversation itself) produces no local file — there is nothing for a connector to read. This is a structural limitation, not a missing feature, and applies equally to every such interface investigated.
 
 ---
 
-## Embedding Model
+## Running locally
 
-### Gemini Embeddings (gemini-embedding-001)
+```bash
+cp .env.example .env      # fill in real values (DATABASE_URL, GEMINI_API_KEY, DEVMIND_API_KEY, etc.)
+docker compose up -d postgres redis chromadb
+cd backend
+alembic upgrade head       # apply all migrations
+uvicorn app.main:app --reload
+```
 
-**Deviation from original plan (Nomic Embed Text, local):** Adopted to keep a single provider (Gemini) across generation and embeddings, simplifying the integration surface. Uses `RETRIEVAL_DOCUMENT` / `RETRIEVAL_QUERY` task types appropriately for stored memories versus search queries.
+In a separate terminal, start the Celery worker:
 
-Status: ✅ Implemented as the sole embedding provider in production
+```bash
+cd backend
+celery -A app.infrastructure.queue.celery_app worker --loglevel=info
+```
 
----
+(On Windows, add `--pool=solo` to the Celery command.)
 
-## External Job Data Sources
+### Running a connector manually
 
-Not present in the original plan — added for the Career Intelligence feature.
+```bash
+python connectors/claude-code-connector/upload_session.py "<path-to-jsonl>"
+python connectors/codex-connector/upload_session.py "<path-to-jsonl>"
+python connectors/cursor-connector/upload_session.py "<path-to-state.vscdb>"
+python connectors/antigravity-connector/upload_session.py "<path-to-transcript.jsonl>"
+```
 
-### Himalayas (primary, no setup required)
-Official, free public API. Remote-jobs focused. Zero authentication, zero cost, no rate-limit issues encountered.
+### Running all connectors automatically
 
-### Apify — Rapid LinkedIn Jobs Scraper (per team direction)
-Paid, per-use ($0.50/1,000 results), scrapes LinkedIn's public job search pages (no login required, no personal account risk). Used specifically per explicit team direction, given LinkedIn has no free official job-search API.
+Instead of running each connector individually, use the single automation script — it starts Docker, the API, Celery, and then runs all four connectors (Claude Code, Codex, Cursor, Antigravity) in sequence, uploading any new sessions found.
 
-**Real constraints hit during development:** monthly credit exhausted on first account during initial testing; field-naming (snake_case, not camelCase) differs from the UI labels and required inspecting the Actor's actual stored input to discover; a minimum `jobs_entries >= 10` validation rule is undocumented in the UI.
+```powershell
+cd DevMind
+.\backend\run_all_connectors.bat
+```
 
-Status: ✅ Both sources implemented behind a common, swappable interface (`search_jobs()` returning a normalized shape) — adding or switching sources requires no changes to the worker or scoring logic
+This is safe to run repeatedly — connectors are idempotent, so already-uploaded sessions are simply skipped, not duplicated.
 
----
+**What it does, step by step:**
+1. Starts Docker containers (PostgreSQL, Redis, ChromaDB)
+2. Starts the FastAPI backend (`uvicorn`)
+3. Starts the Celery worker
+4. Runs each connector against its real local session files:
+   - Claude Code — `~/.claude/projects/`
+   - Codex — `~/.codex/sessions/`
+   - Cursor — local SQLite DB (`state.vscdb`)
+   - Antigravity IDE — `~/.gemini/antigravity-ide/brain/`
 
-## Authentication
+**Automating it further:** this same script is registered as a scheduled Windows Task (`DevMind Nightly Sync`), running automatically every night via Task Scheduler — no manual step required once set up.
 
-### API Key (Bearer token)
-
-**Deviation from original plan (JWT):** A single hashed API key per user, checked via a shared `get_current_user` FastAPI dependency across every endpoint and connector. Simpler for the current single-user development stage; JWT remains the natural next step once real multi-user login is needed.
-
-Status: ✅ Implemented across all endpoints and all four connectors
-
----
-
-## Model Context Protocol (MCP)
-
-Not present in the original plan — added to make DevMind's data queryable directly from AI coding tools in natural conversation.
-
-`mcp_server.py` exposes four tools: `get_developer_profile`, `search_memories`, `get_recommendations`, `get_career_matches` — each a thin wrapper calling DevMind's own REST API.
-
-Status:
-- ✅ Claude Desktop — verified working with real data
-- ✅ Cursor — verified working with real data
-- ✅ Antigravity IDE — verified working with real data
-- ⏸️ Codex — correctly configured (standalone CLI, not the VS Code extension, which has a known MCP-detection bug) but blocked by an unrelated account usage limit
-
----
-
-## Automation
-
-### Windows Task Scheduler
-
-- **Nightly**: runs all four connectors (Claude Code, Codex, Cursor, Antigravity) automatically, capturing new sessions with zero manual steps
-- **Weekly**: runs career/job matching separately, deliberately kept apart from the nightly sync to conserve Gemini/Apify quota and credit
-
-Status: ✅ Implemented and verified with real, unattended captures of genuinely new sessions
+**Verifying it worked:**
+```powershell
+docker compose exec postgres psql -U devmind -d devmind -c "SELECT session_upload_id, status, ingested_at FROM sessions ORDER BY ingested_at DESC LIMIT 5;"
+```
+Should show recent, real session uploads with `status: parsed`.
 
 ---
 
-## Deployment
+## Project structure
 
-### Docker + Docker Compose
-
-Runs PostgreSQL, Redis, and ChromaDB as isolated, reproducible services.
-
-Status: ✅ Implemented as planned
+```
+DevMind/
+├── backend/
+│   ├── app/
+│   │   ├── infrastructure/
+│   │   │   ├── db/models/        # SQLAlchemy models, one file per table
+│   │   │   ├── llm/               # Gemini provider: events, embeddings, recommendations, resume content
+│   │   │   ├── embeddings/        # Gemini embedding wrapper
+│   │   │   ├── vectorstore/       # ChromaDB client wrapper
+│   │   │   ├── documents/         # Resume .docx builder
+│   │   │   ├── jobs/               # Job-source clients (Himalayas, Arbeitnow, etc.)
+│   │   │   └── queue/             # Celery app configuration
+│   │   └── interfaces/http/       # FastAPI router, auth dependency
+│   ├── workers/                   # One Celery task per pipeline stage
+│   ├── alembic/versions/          # Migration history
+│   ├── mcp_server.py              # MCP server for Claude Desktop
+│   └── run_all_connectors.bat     # Automation entry point
+├── connectors/
+│   ├── claude-code-connector/
+│   ├── codex-connector/
+│   ├── cursor-connector/
+│   └── antigravity-connector/
+└── docs/
+    └── devmind-mvp-plan.md        # Full scope, schema, API contracts, and investigation log
+```
 
 ---
 
-## Version Control
+## Status
 
-### Git + GitHub
+**Core platform: complete.** Capture, parsing, event extraction, memory, skill tracking, profile generation, recommendations, semantic search, weekly reports, authentication, and Claude Desktop integration are all built and validated on real data across all four connectors.
 
-Status: ✅ Implemented as planned
+**In progress:** Career Intelligence job matching (blocked on a source decision — free-only vs. paid/enterprise LinkedIn access — pending team discussion) and the resume upload path.
+
+**Deferred, documented, not planned near-term:** ChatGPT and regular Claude Desktop chat connectors (both are cloud-only with no local file to read — the only path is each platform's manual account data export).
 
 ---
 
-# Architecture Summary — As Built
+## License
 
-| Layer | Planned | As Built | Status |
-|---|---|---|---|
-| Frontend | Next.js + React | — | Not started |
-| Backend | FastAPI | FastAPI | ✅ |
-| Authentication | JWT | API Key (Bearer) | ✅ (deviated, documented reason) |
-| Database | PostgreSQL | PostgreSQL | ✅ |
-| Vector DB | ChromaDB | ChromaDB | ✅ |
-| Cache/Queue | Redis + Celery | Redis + Celery | ✅ |
-| Agentic AI | LangGraph | LangGraph | ✅ (learning exercise, 2 working agents) |
-| Embeddings | Nomic Embed Text | Gemini Embeddings | ✅ (deviated, documented reason) |
-| LLM | Ollama (MVP) | Gemini | ✅ (deviated, documented experiment) |
-| Job Data | Not planned | Himalayas + Apify | ✅ (added for Career Intelligence) |
-| MCP Integration | Not planned | Claude Desktop, Cursor, Antigravity, Codex | ✅ (3 of 4 verified) |
-| Automation | Not planned | Windows Task Scheduler | ✅ |
-| Deployment | Docker | Docker + Docker Compose | ✅ |
-| Version Control | Git + GitHub | Git + GitHub | ✅ |
+This project is intended for educational, research, and portfolio purposes. The architecture is designed with production-ready principles and can be extended into a scalable SaaS platform.
