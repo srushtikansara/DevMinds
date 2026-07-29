@@ -2,8 +2,8 @@ import json
 from google import genai
 from app.config import settings
 from tenacity import retry, stop_after_attempt, wait_fixed
-client = genai.Client(api_key=settings.gemini_api_key)
-
+# client = genai.Client(api_key=settings.gemini_api_key)
+client = genai.Client(api_key=settings.gemini_api_key_testing)
 EVENT_SCHEMA = {
     "type": "array",
     "items": {
