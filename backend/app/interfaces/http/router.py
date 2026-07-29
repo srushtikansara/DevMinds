@@ -292,35 +292,31 @@ def reject_match(recommendation_id:str , user: User =Depends(get_current_user),d
     db.commit()
     
     return {"status": "rejected"}
-
 @router.get("/career/matches")
-def get_career_matches(user:User = Depends(get_current_user),db:DBSession = Depends(get_db)):
+def get_career_matches(user: User = Depends(get_current_user), db: DBSession = Depends(get_db)):
     matches = (
-        db.query(CareerRecommendation,JobPosting)
-        .join(JobPosting,CareerRecommendation.job_postings_id == JobPosting.id)
-        .filter(
-            CareerRecommendation.user_id == user.id,
-        (CareerRecommendation.rejected == False) | (CareerRecommendation.rejected.is_(None))
-        )
+        db.query(CareerRecommendation, JobPosting)
+        .join(JobPosting, CareerRecommendation.job_postings_id == JobPosting.id)
+        .filter(CareerRecommendation.user_id == user.id, CareerRecommendation.rejected == False)
         .order_by(CareerRecommendation.fit_score.desc())
-        .all()  
+        .all()
     )
-    
     return {
-        "matches":[
+        "matches": [
             {
-                "id":rec.id,
-                "title":posting.title,
-                "company":posting.company,
-                "location":posting.location,
-                "url":posting.url,
-                "fit_score":rec.fit_score,
+                "id": rec.id,
+                "title": posting.title,
+                "company": posting.company,
+                "location": posting.location,
+                "url": posting.url,
+                "fit_score": rec.fit_score,
                 "fit_reason": rec.fit_reason,
+                "applied": rec.applied,
+                "reviewed" : rec.reviewed
             }
             for rec, posting in matches
         ]
     }
-    
 @router.post("/career/matches/{recommendation_id}/prepare")
 def prepare_application(recommendation_id: str, user: User= Depends(get_current_user),db: DBSession = Depends(get_db)):
     recommedation = (
