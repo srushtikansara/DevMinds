@@ -18,6 +18,8 @@ from app.infrastructure.llm.gemini_provider import tailor_resume_for_job
 from app.interfaces.http.auth import get_current_user
 from workers.resume_worker import generate_resume
 from fastapi.responses import FileResponse
+from workers.agent_worker import run_learning_agent
+from app.infrastructure.queue.celery_app import celery_app
 from datetime import date
 from workers.parser_worker import parse_session
 
@@ -41,6 +43,7 @@ class RoleInput(BaseModel):
     context: str
     start_date: str
     end_date: str = "Present"
+    type: str = "project"  # "project" or "experience"
 
 
 class EducationInput(BaseModel):
@@ -207,6 +210,18 @@ def get_recommendations(user:User = Depends(get_current_user), db: DBSession = D
             for r in recommendations
         ]
     }
+@router.post("/learning/coach/{skill_name}")
+def get_learning_coaching(skill_name: str, user: User = Depends(get_current_user)):
+    task = run_learning_agent.delay(user.id, skill_name)
+    return {"status": "queued", "task_id": task.id}
+
+
+@router.get("/learning/coach/result/{task_id}")
+def get_learning_coaching_result(task_id: str):
+    result = celery_app.AsyncResult(task_id)
+    if not result.ready():
+        return {"status": "pending"}
+    return {"status": "complete", "result": result.result}
 
 @router.post("/resumes/upload",status_code=201)
 def upload_resume(
