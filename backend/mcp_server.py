@@ -33,5 +33,21 @@ def get_career_matches() -> dict:
     response = requests.get(f"{API_URL}/career/matches",headers=HEADERS)
     return response.json()
 
+@mcp.tool()
+def get_learning_coaching(skill_name: str) -> dict:
+    """Get a mentorship-style learning plan for a specific skill, based on the developer's real tracked work, related memories, and current job market demand."""
+    response = requests.post(f"{API_URL}/learning/coach/{skill_name}", headers=HEADERS)
+    task_id = response.json()["task_id"]
+
+    import time
+    for _ in range(15):  # poll for up to ~15 seconds
+        time.sleep(1)
+        result_response = requests.get(f"{API_URL}/learning/coach/result/{task_id}", headers=HEADERS)
+        result_data = result_response.json()
+        if result_data["status"] == "complete":
+            return result_data["result"]
+
+    return {"status": "still processing, try asking again in a few seconds"}
+
 if __name__=="__main__":
     mcp.run()

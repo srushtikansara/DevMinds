@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 type Resume = { id: string; source: string; version: number; created_at: string };
-type Role = { title: string; context: string; start_date: string; end_date: string };
+type Role = { title: string; context: string; start_date: string; end_date: string; type: "experience" | "project" };
 type Education = { degree: string; institution: string; graduation_date: string };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -32,7 +32,7 @@ export default function ResumesPage() {
   const [portfolioUrl, setPortfolioUrl] = useState("");
 
   const [education, setEducation] = useState<Education[]>([{ degree: "", institution: "", graduation_date: "" }]);
-  const [roles, setRoles] = useState<Role[]>([{ title: "", context: "", start_date: "", end_date: "Present" }]);
+  const [roles, setRoles] = useState<Role[]>([{ title: "", context: "", start_date: "", end_date: "Present", type: "project" }]);
   const displayResumes = resumes.filter((r) => r.source !== "tailored");
 
   async function loadResumes() {
@@ -93,30 +93,40 @@ export default function ResumesPage() {
     setRoles(updated);
   }
 
-  async function handleGenerate() {
-    setUploading(true);
-    setMessage(null);
-    try {
-      await apiCall("/resumes/generate", {
-        method: "POST",
-        body: JSON.stringify({
-          full_name: fullName,
-          email,
-          phone,
-          linkedin_url: linkedinUrl,
-          portfolio_url: portfolioUrl,
-          education,
-          roles,
-        }),
-      });
-      setMessage("Resume generation started — refresh in a few seconds.");
-      setShowForm(false);
-    } catch {
-      setMessage("Generation failed. Check all fields are filled in.");
-    } finally {
+async function handleGenerate() {
+  setUploading(true);
+  setMessage(null);
+  try {
+    // Filter out any entries where required fields are still empty
+    const validEducation = education.filter((e) => e.degree.trim() && e.institution.trim());
+    const validRoles = roles.filter((r) => r.title.trim() && r.context.trim());
+
+    if (validEducation.length === 0 || validRoles.length === 0) {
+      setMessage("Please fill in at least one complete education entry and one role/project.");
       setUploading(false);
+      return;
     }
+
+    await apiCall("/resumes/generate", {
+      method: "POST",
+      body: JSON.stringify({
+        full_name: fullName,
+        email,
+        phone,
+        linkedin_url: linkedinUrl,
+        portfolio_url: portfolioUrl,
+        education: validEducation,
+        roles: validRoles,
+      }),
+    });
+    setMessage("Resume generation started — refresh in a few seconds.");
+    setShowForm(false);
+  } catch {
+    setMessage("Generation failed. Check all fields are filled in.");
+  } finally {
+    setUploading(false);
   }
+}
 
   const inputClass = "bg-[#0F1419] border border-[#2A3038] rounded-md px-3 py-2 text-sm w-full";
 
@@ -183,7 +193,7 @@ export default function ResumesPage() {
                 <div className="flex justify-between items-center mb-2">
                   <p className="text-xs uppercase tracking-wide text-[#4C8DFF]">Experience / Projects</p>
                   <button
-                    onClick={() => setRoles([...roles, { title: "", context: "", start_date: "", end_date: "Present" }])}
+                   onClick={() => setRoles([...roles, { title: "", context: "", start_date: "", end_date: "Present", type: "project" }])}
                     className="text-xs px-2 py-1 rounded border border-[#2A3038]"
                   >
                     + Add experience
@@ -193,13 +203,21 @@ export default function ResumesPage() {
                   Add each real project or role separately — DevMind will pull matching work from your tracked memories for each one.
                 </p>
                 {roles.map((role, i) => (
-                  <div key={i} className="grid grid-cols-4 gap-3 mb-2">
-                    <input placeholder="Title" value={role.title} onChange={(e) => updateRole(i, "title", e.target.value)} className={inputClass} />
-                    <input placeholder="Context (Company / Personal Project)" value={role.context} onChange={(e) => updateRole(i, "context", e.target.value)} className={inputClass} />
-                    <input placeholder="Start date" value={role.start_date} onChange={(e) => updateRole(i, "start_date", e.target.value)} className={inputClass} />
-                    <input placeholder="End date" value={role.end_date} onChange={(e) => updateRole(i, "end_date", e.target.value)} className={inputClass} />
-                  </div>
-                ))}
+  <div key={i} className="grid grid-cols-5 gap-3 mb-2">
+    <select
+      value={role.type}
+      onChange={(e) => updateRole(i, "type", e.target.value)}
+      className={inputClass}
+    >
+      <option value="project">Project</option>
+      <option value="experience">Experience</option>
+    </select>
+    <input placeholder="Title" value={role.title} onChange={(e) => updateRole(i, "title", e.target.value)} className={inputClass} />
+    <input placeholder="Context (Company / Personal Project)" value={role.context} onChange={(e) => updateRole(i, "context", e.target.value)} className={inputClass} />
+    <input placeholder="Start date" value={role.start_date} onChange={(e) => updateRole(i, "start_date", e.target.value)} className={inputClass} />
+    <input placeholder="End date" value={role.end_date} onChange={(e) => updateRole(i, "end_date", e.target.value)} className={inputClass} />
+  </div>
+))}
               </div>
 
               <p className="text-xs text-[#8A9099]">

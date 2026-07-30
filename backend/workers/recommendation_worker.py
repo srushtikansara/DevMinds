@@ -23,7 +23,7 @@ def generate_recommendation(self, user_id: str):
         ]
 
         raw_recommendations = recommend_next_skills(skill_summary)
-        raw_recommendations = recommend_next_skills(skill_summary)
+      
     
         created_counts = 0
         for rec in raw_recommendations:
@@ -59,15 +59,20 @@ def generate_recommendation(self, user_id: str):
 
         db.commit()
                         
+        print(f"DEBUG: created_counts={created_counts}")
         if created_counts > 0:
+            print("DEBUG: entering trigger block")
             top_rec = (
                 db.query(Recommendation)
                 .filter(Recommendation.user_id == user_id)
                 .order_by(Recommendation.relevance_score.desc())
                 .first()
             )
+            print(f"DEBUG: top_rec={top_rec}")
             if top_rec:
+                print(f"DEBUG: calling run_learning_agent.delay for {top_rec.content}")
                 run_learning_agent.delay(user_id, top_rec.content)
+                print("DEBUG: delay() call completed successfully")
         return created_counts
 
     except Exception as exc:

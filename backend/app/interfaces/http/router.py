@@ -211,8 +211,8 @@ def get_recommendations(user:User = Depends(get_current_user), db: DBSession = D
         ]
     }
 @router.post("/learning/coach/{skill_name}")
-def get_learning_coaching(skill_name: str, user: User = Depends(get_current_user)):
-    task = run_learning_agent.delay(user.id, skill_name)
+def get_learning_coaching(skill_name: str,  relearn: bool = False, user: User = Depends(get_current_user)):
+    task = run_learning_agent.delay(user.id, skill_name,"relearn" if relearn else None)
     return {"status": "queued", "task_id": task.id}
 
 
