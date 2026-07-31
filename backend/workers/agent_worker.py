@@ -18,11 +18,12 @@ def run_career_agent(self, recommendation_id: str, user_id: str):
 
 
 @celery_app.task(name="run_learning_agent", bind=True, max_retries=3, default_retry_delay=10)
-def run_learning_agent(self, user_id: str, skill_name: str):
+def run_learning_agent(self, user_id: str, skill_name: str,mode:str=None):
     agent = build_learning_agent()
     result = agent.invoke({
         "user_id": user_id,
         "skill_name": skill_name,
+        "mode":mode,
         "decision_log": [],
     })
     return {
