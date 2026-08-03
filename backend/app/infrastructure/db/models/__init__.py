@@ -13,5 +13,6 @@ from app.infrastructure.db.models.weekly_report import WeeklyReport
 from app.infrastructure.db.models.resume import Resume
 from app.infrastructure.db.models.job_posting import JobPosting
 from app.infrastructure.db.models.career_recommendation import CareerRecommendation
+from app.infrastructure.db.models.skill_event import SkillEvent
 __all__ = ["User","Connector","Session","Embedding","DeveloperProfile","Conversation","DeveloperEvent","SkillSignal","Skill","Memory","Recommendation","WeeklyReport","Resume","JobPosting","CareerRecommendation"]
 

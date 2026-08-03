@@ -16,6 +16,8 @@ from app.infrastructure.vectorstore.chroma_client import find_similar
 from app.infrastructure.db.models import DeveloperProfile,WeeklyReport
 from app.infrastructure.llm.gemini_provider import tailor_resume_for_job
 from app.interfaces.http.auth import get_current_user
+from backend.app.infrastructure.db.models import recommendation
+from backend.app.infrastructure.notion.notion_client import log_application
 from workers.resume_worker import generate_resume
 from fastapi.responses import FileResponse
 from workers.agent_worker import run_learning_agent
@@ -366,10 +368,13 @@ def prepare_application(recommendation_id: str, user: User= Depends(get_current_
         source = "tailored",
         version = 1      
     )
-    
+    try:
+        log_application(posting.title, posting.company, recommendation.fit_score, tailored_content["summary"])
+    except Exception as e:
+        print(f"Notion logging failed (non-fatal): {e}") 
     db.add(tailored_resume)
     
-    recommedation.reviewed = True
+    recommendation.reviewed = True
     db.commit()
     db.refresh(tailored_resume)
     

@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     memory_merge_similarity_threshold: float = 0.92
     apify_api_token: str = ""
     tavily_api_key: str = ""
+    github_token: str = ""
+    notion_token: str = ""
+    notion_database_id: str = ""
 
     class Config:
         env_file = BASE_DIR / ".env"
