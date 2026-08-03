@@ -28,7 +28,7 @@ def update_developer_profile(self, user_id: str):
         top_memories = (
             db.query(Memory)
             .filter(Memory.user_id == user_id)
-            .order_by(Memory.importance_score.desc())
+            .order_by(Memory.updated_at.desc())
             .limit(10)
             .all()
         )
