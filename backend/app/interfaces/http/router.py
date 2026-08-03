@@ -23,6 +23,7 @@ from workers.agent_worker import run_learning_agent
 from app.infrastructure.queue.celery_app import celery_app
 from datetime import date
 from workers.parser_worker import parse_session
+from app.infrastructure.gmail.gmail_client import create_followup_draft
 
 router = APIRouter()
 RAW_SESSIONS_DIR = "raw_sessions"
@@ -371,6 +372,29 @@ def prepare_application(recommendation_id: str, user: User = Depends(get_current
         log_application(posting.title, posting.company, recommendation.fit_score, tailored_content["summary"])
     except Exception as e:
         print(f"Notion logging failed (non-fatal): {e}")
+    try:
+        log_application(posting.title, posting.company, recommendation.fit_score, tailored_content["summary"])
+    except Exception as e:
+        print(f"Notion logging failed (non-fatal): {e}")
+
+    try:
+        draft_id = create_followup_draft(
+        to="recruiter@example.com",  # placeholder - real recipient would come from job posting data if available
+        subject=f"Following up on my application for {posting.title}",
+        body=f"""Hi,
+
+        I recently applied for the {posting.title} position at {posting.company} and wanted to follow up.
+
+        {tailored_content['summary']}
+
+        I'd welcome the opportunity to discuss how my background could contribute to your team.
+
+        Best regards
+        """,
+        )
+        print(f"Gmail draft created: {draft_id}")
+    except Exception as e:
+        print(f"Gmail draft creation failed (non-fatal): {e}")
 
     db.add(tailored_resume)
     recommendation.reviewed = True

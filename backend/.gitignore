@@ -21,3 +21,6 @@ test_*.py
 my_resume*.docx
 generated_resumes/
 uploaded_resumes/
+
+credentials.json
+gmail_token.json

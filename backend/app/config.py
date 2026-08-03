@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     github_token: str = ""
     notion_token: str = ""
     notion_database_id: str = ""
+    gmail_api_key: str = ""
 
     class Config:
         env_file = BASE_DIR / ".env"

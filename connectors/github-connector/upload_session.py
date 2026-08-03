@@ -32,9 +32,10 @@ def normalize_commit(commit_data: dict) -> dict:
     message = commit_data["commit"]["message"]
     repo_name = commit_data["repository"]["full_name"]
     sha = commit_data["sha"][:7]
+
     return {
         "role": "user",
-        "text": f"[GitHub commit in {repo_name}] {message} (commit {sha})",
+        "content": f"[GitHub commit in {repo_name}] {message} (commit {sha})",
         "timestamp": commit_data["commit"]["author"]["date"],
     }
 

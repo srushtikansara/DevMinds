@@ -35,7 +35,7 @@ def fetch_skill_node(state: LearningAssistantState) -> LearningAssistantState:
             db.query(DeveloperEvent)
             .join(SkillEvent, SkillEvent.developer_event_id == DeveloperEvent.id)
             .filter(SkillEvent.skill_id == skill.id)
-            .order_by(DeveloperEvent.created_at.desc())
+            .order_by(DeveloperEvent.occurred_at.desc())
             .limit(5)
             .all()
         )
