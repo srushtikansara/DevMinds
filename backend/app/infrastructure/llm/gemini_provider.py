@@ -3,7 +3,7 @@ from google import genai
 from app.config import settings
 from tenacity import retry, stop_after_attempt, wait_fixed
 # client = genai.Client(api_key=settings.gemini_api_key)
-client = genai.Client(api_key=settings.gemini_api_key_testing)
+client = genai.Client(api_key=settings.gemini_api_key)
 EVENT_SCHEMA = {
     "type": "array",
     "items": {
@@ -263,7 +263,7 @@ genuine gaps between their background and this role's requirements.
     try:
         return json.loads(response.text)
     except json.JSONDecodeError:
-        return {"summary": base_summary, "highlighted_skills": [], "tailoring_notes": ""}
+        return {"summary":"", "highlighted_skills": [], "tailoring_notes": ""}
     
 def research_company(company_name: str, model: str = "gemini-3.5-flash") -> dict:
     prompt = f"What does the company '{company_name}' actually do? Give a concise, 2-3 sentence summary of their business focus and any recent, notable news."
