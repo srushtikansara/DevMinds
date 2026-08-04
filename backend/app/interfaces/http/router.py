@@ -16,7 +16,7 @@ from app.infrastructure.vectorstore.chroma_client import find_similar
 from app.infrastructure.db.models import DeveloperProfile,WeeklyReport
 from app.infrastructure.llm.gemini_provider import tailor_resume_for_job
 from app.interfaces.http.auth import get_current_user
-from app.infrastructure.notion.notion_client import log_application
+from app.infrastructure.notion.notion_client import log_application,notion
 from workers.resume_worker import generate_resume
 from fastapi.responses import FileResponse
 from workers.agent_worker import run_learning_agent
@@ -24,6 +24,8 @@ from app.infrastructure.queue.celery_app import celery_app
 from datetime import date
 from workers.parser_worker import parse_session
 from app.infrastructure.gmail.gmail_client import create_followup_draft
+from app.config import settings
+
 
 router = APIRouter()
 RAW_SESSIONS_DIR = "raw_sessions"
@@ -62,7 +64,16 @@ class ResumeGenerationRequest(BaseModel):
     portfolio_url: str = ""
     education: list[EducationInput]
     roles: list[RoleInput]
-    
+
+class DraftEmailRequest(BaseModel):
+    to: str
+    subject: str
+    body: str
+
+class NotionLogRequest(BaseModel):
+    title: str
+    content: str
+     
 @router.post("/sessions", status_code=202)
 def upload_session(body: SessionUploadRequest, user: User = Depends(get_current_user) ,db: DBSession = Depends(get_db)):
 
@@ -372,10 +383,6 @@ def prepare_application(recommendation_id: str, user: User = Depends(get_current
         log_application(posting.title, posting.company, recommendation.fit_score, tailored_content["summary"])
     except Exception as e:
         print(f"Notion logging failed (non-fatal): {e}")
-    try:
-        log_application(posting.title, posting.company, recommendation.fit_score, tailored_content["summary"])
-    except Exception as e:
-        print(f"Notion logging failed (non-fatal): {e}")
 
     try:
         draft_id = create_followup_draft(
@@ -457,3 +464,27 @@ def get_applied_jobs(user: User = Depends(get_current_user), db: DBSession = Dep
             for rec, posting in matches
         ]
     }
+
+@router.post("/office/draft-email")
+def office_draft_email(body: DraftEmailRequest, user: User = Depends(get_current_user)):
+    try:
+        draft_id = create_followup_draft(
+            to=body.to,
+            subject=body.subject,
+            body=body.body
+        )
+        return {"status": "drafted", "draft_id": draft_id}
+    except Exception as e:
+        raise HTTPException(500, f"Failed to create draft: {str(e)}")
+    
+@router.post("/office/notion-log")
+def office_log_notion(body: NotionLogRequest, user: User = Depends(get_current_user)):
+    try:
+        notion.pages.create(
+            parent={"database_id": settings.notion_database_id},
+            properties={"Name": {"title": [{"text": {"content": body.title}}]}},
+            children=[{"object": "block", "type": "paragraph", "paragraph": {"rich_text": [{"text": {"content": body.content}}]}}]
+        )
+        return {"status": "logged"}
+    except Exception as e:
+        raise HTTPException(500, f"Failed to log to Notion: {e}")
