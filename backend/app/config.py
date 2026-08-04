@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     notion_token: str = ""
     notion_database_id: str = ""
     gmail_api_key: str = ""
+    google_drive_client_id: str = ""
+    notion_office_database_id: str = ""
 
     class Config:
         env_file = BASE_DIR / ".env"

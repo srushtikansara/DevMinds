@@ -481,7 +481,7 @@ def office_draft_email(body: DraftEmailRequest, user: User = Depends(get_current
 def office_log_notion(body: NotionLogRequest, user: User = Depends(get_current_user)):
     try:
         notion.pages.create(
-            parent={"database_id": settings.notion_database_id},
+            parent={"database_id": settings.notion_office_database_id},
             properties={"Name": {"title": [{"text": {"content": body.title}}]}},
             children=[{"object": "block", "type": "paragraph", "paragraph": {"rich_text": [{"text": {"content": body.content}}]}}]
         )
