@@ -1,4 +1,5 @@
 from typing import TypedDict, Optional
+from urllib import response
 from langgraph import graph
 from langgraph.graph import StateGraph, START, END
 from tenacity import retry, stop_after_attempt, wait_fixed
@@ -84,37 +85,60 @@ def generate_relearn_summary_node(state: LearningAssistantState) -> LearningAssi
         f"[via {m.get('source', 'unknown tool')}]: {m['text']}"
         for m in (state["related_memories"] or [])
     )
+    web = state.get("web_resources") or {"youtube": [], "articles": [], "documentation": []}
+    web_context = f"""
+YouTube: {chr(10).join(f"- {r['title']}: {r['url']}" for r in web.get('youtube', []))}
+Articles: {chr(10).join(f"- {r['title']}: {r['url']}" for r in web.get('articles', []))}
+Documentation: {chr(10).join(f"- {r['title']}: {r['url']}" for r in web.get('documentation', []))}
+"""
 
-    prompt = f"""A developer wants to relearn: {state['skill_name']}
+    prompt = f"""A developer wants a full relearn summary for: {state['skill_name']}
 
 Directly linked real events for this skill (guaranteed relevant, highest confidence):
-{linked_context if linked_context else "(no directly linked events yet - this skill may lack tracked signal)"}
+{linked_context if linked_context else "(no directly linked events yet)"}
 
 Additional related memories (semantic search, broader context):
 {semantic_context}
 
-STEP 1 - Honest assessment (do this first, silently, before writing anything):
-Do the sources above ACTUALLY discuss '{state['skill_name']}' itself, or are they about
-different, only tangentially related infrastructure or tools?
+Real, current learning resources found for this skill:
+{web_context}
 
-STEP 2 - Write your response based on that assessment:
+Write your response in THREE clearly separated parts:
 
-IF genuinely about {state['skill_name']}:
-- Summarize specifically what was covered, prioritizing the directly linked events above
-  as your primary source, using memories only as supplementary context
-- Note which tool each piece of work came from, if indicated
-- Suggest 2-3 genuinely NEW angles or deeper concepts not already covered
+PART 1 - What you've actually done (tracked history):
+Give a DETAILED summary of exactly what DevMind has real evidence you covered, based
+ONLY on the sources above - specific files, specific bugs, specific decisions. If
+there's little or no direct evidence, say so honestly.
 
-IF NOT actually about {state['skill_name']} (just adjacent/related work):
-- Say so plainly, in your first sentence
-- Then describe the related work that DOES exist, and how it could serve as a bridge
-- Do NOT present adjacent work as if it were direct experience
+PART 2 - General knowledge on {state['skill_name']} (not from your tracked history):
+Briefly outline core concepts a developer at this level would typically know, clearly
+labeled as general knowledge, not verified from their tracked work.
 
-Do not invent details not explicitly present in the sources above.
+PART 3 - What to learn next, and how:
+Based on Parts 1 and 2 together, recommend 2-3 SPECIFIC next topics to deepen this
+skill. For each one:
+- Explain WHY it's the right next step given what they've already done
+- Explain HOW to approach learning it (their real style, if evident from tracked work)
+- You MUST explicitly name and link at least one resource from the "Real, current
+  learning resources" section above, inline, within your explanation of that step -
+  choose whichever resource is most relevant to that specific topic. Do not describe
+  the topic generically and leave the resources unreferenced; do not just list them
+  separately at the end.
+
+Do not blend the three parts together - keep clear headers and keep "verified from
+your work" separate from "general knowledge" throughout.
 """
     response = client.models.generate_content(model="gemini-3.5-flash", contents=prompt)
-    state["learning_plan"] = response.text
-    state["decision_log"].append("Generated cross-tool relearn summary")
+    summary_text = response.text
+
+    if state.get("linked_events"):
+        events_list = "\n".join(f"- {e}" for e in state["linked_events"])
+        summary_text += f"\n\n---\n**Real linked events used for this summary:**\n{events_list}"
+    else:
+        summary_text += "\n\n---\n**No directly linked events found for this skill yet.**"
+
+    state["learning_plan"] = summary_text
+    state["decision_log"].append("Generated full relearn summary (tracked + general + next steps)")
     return state
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(10))
@@ -162,8 +186,16 @@ If relevant, reference specific resources above by name in your plan.
 
 """
     response = client.models.generate_content(model="gemini-3.5-flash", contents=prompt)
-    state["learning_plan"] = response.text
-    state["decision_log"].append(f"Generated {mode} plan")
+    summary_text = response.text
+
+    if state.get("linked_events"):
+        events_list = "\n".join(f"- {e}" for e in state["linked_events"])
+        summary_text += f"\n\n---\n**Real linked events used for this summary:**\n{events_list}"
+    else:
+        summary_text += "\n\n---\n**No directly linked events found for this skill yet.**"
+
+    state["learning_plan"] = summary_text
+    state["decision_log"].append("Generated cross-tool relearn summary (tracked + general knowledge)")
     return state
 
 def search_learning_resources_node(state: LearningAssistantState) -> LearningAssistantState:
@@ -237,8 +269,7 @@ def check_job_market_node(state: LearningAssistantState) -> LearningAssistantSta
     return state
 
 def route_after_market(state: LearningAssistantState) -> str:
-    if state.get("mode") == "relearn":
-        return "END"
+
     return "search_resources"
 
 
