@@ -13,7 +13,11 @@ def process_skills(self, developer_event_id: str):
             raise ValueError(f"DeveloperEvent {developer_event_id} not found")
 
         raw_tags = event.technology_tags or ""
-        skill_names = [tag.strip().lower() for tag in raw_tags.split(",") if tag.strip()]
+        skill_names = [
+            tag.strip().lower().replace("_", "-").replace(" ", "-")
+            for tag in raw_tags.split(",")
+            if tag.strip()
+        ]   
         EXCLUDED_SKILL_NAMES = {"devmind", "devmind api","docker-compose"}
         skill_names = [s for s in skill_names if s not in EXCLUDED_SKILL_NAMES]
         if not skill_names:
