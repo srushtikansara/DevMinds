@@ -14,6 +14,8 @@ def process_skills(self, developer_event_id: str):
 
         raw_tags = event.technology_tags or ""
         skill_names = [tag.strip().lower() for tag in raw_tags.split(",") if tag.strip()]
+        EXCLUDED_SKILL_NAMES = {"devmind", "devmind api","docker-compose"}
+        skill_names = [s for s in skill_names if s not in EXCLUDED_SKILL_NAMES]
         if not skill_names:
             return 0
 
@@ -40,7 +42,7 @@ def process_skills(self, developer_event_id: str):
                     last_updated=datetime.now(timezone.utc),
                 )
                 db.add(skill)
-                db.flush()  # ensure skill.id exists before linking
+                db.flush()  
             else:
                 skill.signal_count += 1
                 skill.proficiency_score = min(

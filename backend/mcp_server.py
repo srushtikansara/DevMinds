@@ -54,7 +54,7 @@ def get_learning_coaching(skill_name: str, relearn: bool = False) -> dict:
     except requests.exceptions.RequestException as e:
         return {"status": "error", "message": f"Failed to queue task: {e}"}
 
-    for _ in range(15):
+    for _ in range(40):
         time.sleep(1)
         try:
             result_response = requests.get(f"{API_URL}/learning/coach/result/{task_id}", headers=HEADERS, timeout=TIMEOUT)
@@ -65,6 +65,24 @@ def get_learning_coaching(skill_name: str, relearn: bool = False) -> dict:
             continue
 
     return {"status": "still processing, try asking again in a few seconds", "task_id": task_id}
+
+@mcp.tool()
+def draft_email(to:str,subject:str,body:str)-> dict:
+    """Draft an email in Gmail (never sends automatically - user reviews and sends manually)."""
+    try:
+        response = requests.post(f"{API_URL}/office/draft-email", json={"to": to, "subject": subject, "body": body}, headers=HEADERS, timeout=TIMEOUT)
+        return response.json()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    
+@mcp.tool()
+def log_to_notion(title:str,content:str) ->dict:
+    """Create a new page in the connected Notion database with a title and content."""
+    try:
+        response = requests.post(f"{API_URL}/office/notion-log", json={"title": title, "content": content}, headers=HEADERS, timeout=TIMEOUT)
+        return response.json()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
     mcp.run()

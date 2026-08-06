@@ -8,6 +8,10 @@ from app.infrastructure.embeddings.gemini_embeddings import get_embedding
 from app.infrastructure.vectorstore.chroma_client import find_similar
 from app.infrastructure.llm.gemini_provider import client
 from app.infrastructure.jobs.himalayas_client import search_jobs
+from tavily import TavilyClient
+from app.config import settings
+
+tavily= TavilyClient(api_key=settings.tavily_api_key)
 import json
 
 
@@ -21,6 +25,7 @@ class LearningAssistantState(TypedDict):
     learning_plan: Optional[str]
     job_market_count: Optional[int]
     decision_log: list[str]
+    web_resources: Optional[list]
 
 def fetch_skill_node(state: LearningAssistantState) -> LearningAssistantState:
     db = SessionLocal()
@@ -54,7 +59,7 @@ def search_related_memory_node(state: LearningAssistantState) -> LearningAssista
     query_vector = get_embedding(state['skill_name'], task_type="RETRIEVAL_QUERY")
     matches = find_similar(query_vector, top_k=3)
     
-    relevant_matches = [m for m in matches if m.get("similarity_score",0) >=0.5]
+    relevant_matches = [m for m in matches if (1 - m.get("distance", 1)) >= 0.5]
     state['related_memories'] = relevant_matches
     state['decision_log'].append(f"Found {len(matches)} related memories")
     return state
@@ -133,13 +138,74 @@ not explicitly present in this text.
 
 As their mentor, write:
 1. One sentence acknowledging specifically what you've seen them do already, quoting or
-   closely paraphrasing an actual detail from the directly linked events above
+   closely paraphrasing an actual detail from the sources above
 2. A concise, 3-step plan for what to focus on next, building directly on that real work
 3. One honest sentence about the single biggest gap holding them back right now
+4. A brief note on HOW to learn this effectively, given their specific style - e.g.
+   "given you learn by building real integrations rather than reading docs first,
+   I'd skip the theory and go straight to step 1" - genuinely tailored to the pattern
+   you observe in their real work, not generic study advice
+5. One sentence explaining WHY you chose this particular plan over alternatives -
+   what specifically in their real history led you here, so they can see your reasoning,
+   not just the conclusion
+   
+   Real, current learning resources found for this skill:
+YouTube: {chr(10).join(f"- {r['title']}: {r['url']}" for r in state.get('web_resources', {}).get('youtube', []))}
+Articles: {chr(10).join(f"- {r['title']}: {r['url']}" for r in state.get('web_resources', {}).get('articles', []))}
+Documentation: {chr(10).join(f"- {r['title']}: {r['url']}" for r in state.get('web_resources', {}).get('documentation', []))}
+
+If relevant, reference specific resources above by name in your plan.
+
 """
     response = client.models.generate_content(model="gemini-3.5-flash", contents=prompt)
     state["learning_plan"] = response.text
     state["decision_log"].append(f"Generated {mode} plan")
+    return state
+
+def search_learning_resources_node(state: LearningAssistantState) -> LearningAssistantState:
+    skill = state['skill_name']
+    resources = {"youtube": [], "articles": [], "documentation": []}
+    try:
+        yt_results = tavily.search(
+            query=f"best Youtube tutorial or guide to learn {state['skill_name']} for developers",
+            max_results=2,
+            include_domains=["youtube.com"],
+        )
+        resources["youtube"] = [
+            {"title": r.get("title", ""), "url": r.get("url", "")}
+            for r in yt_results.get("results", [])
+        ]
+    except Exception as e:
+        resources = []
+        print(f"Tavily search failed (non-fatal): {e}")
+        
+    try:
+        article_results = tavily.search(
+            query=f"best article or blog post explaining {skill} in depth for developers",
+            max_results=2,
+            exclude_domains=["youtube.com"],
+        )
+        resources["articles"] = [
+            {"title": r.get("title", ""), "url": r.get("url", "")}
+            for r in article_results.get("results", [])
+        ]
+    except Exception as e:
+        print(f"Article search failed (non-fatal): {e}")
+        
+    try:
+        doc_results = tavily.search(
+            query=f"{skill} official documentation getting started guide",
+            max_results=2,
+        )
+        resources["documentation"] = [
+            {"title": r.get("title", ""), "url": r.get("url", "")}
+            for r in doc_results.get("results", [])
+        ]
+    except Exception as e:
+        print(f"Documentation search failed (non-fatal): {e}") 
+
+    state["web_resources"] = resources
+    state["decision_log"].append(f"Found {len(resources)} real web resources for {state['skill_name']}")
     return state
 
 
@@ -167,6 +233,7 @@ def build_learning_agent():
     graph.add_node("getting_started", getting_started_node)
     graph.add_node("next_level", next_level_node)
     graph.add_node("check_market", check_job_market_node)
+    graph.add_node("search_resources", search_learning_resources_node)
 
     graph.add_edge(START, "fetch_skill")
     graph.add_edge("fetch_skill", "search_memory")
@@ -181,6 +248,7 @@ def build_learning_agent():
     graph.add_edge("relearn_summary", "check_market")
     graph.add_edge("getting_started", "check_market")
     graph.add_edge("next_level", "check_market")
-    graph.add_edge("check_market", END)
+    graph.add_edge("check_market", "search_resources")
+    graph.add_edge("search_resources", END)
 
     return graph.compile()

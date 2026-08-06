@@ -30,4 +30,5 @@ def run_learning_agent(self, user_id: str, skill_name: str,mode:str=None):
         "decision_log": result["decision_log"],
         "learning_plan": result.get("learning_plan"),
         "job_market_count": result.get("job_market_count"),
+        "web_resources": result.get("web_resources"),
     }

@@ -9,7 +9,7 @@ from workers.recommendation_worker import generate_recommendation
 from workers.report_worker import generate_weekly_report
 from workers.resume_worker import generate_resume
 
-@celery_app.task(name="extract_events", bind=True, max_retries=3, default_retry_delay=10)
+@celery_app.task(name="extract_events_task", bind=True, max_retries=3, default_retry_delay=10)
 def extract_events_task(self, conversation_id: str):
     db = SessionLocal()
     try:

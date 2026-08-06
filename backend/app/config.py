@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     gmail_api_key: str = ""
     google_drive_client_id: str = ""
     notion_office_database_id: str = ""
-
+    slack_bot_token: str = ""
     class Config:
         env_file = BASE_DIR / ".env"
 
