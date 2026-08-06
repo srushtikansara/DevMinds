@@ -1,5 +1,5 @@
 from datetime import datetime, timezone, timedelta
-
+from app.infrastructure.slack.slack_client import post_message
 from app.infrastructure.queue.celery_app import celery_app
 from app.infrastructure.db.session import SessionLocal
 from app.infrastructure.db.models import Memory, Skill, Recommendation, WeeklyReport
@@ -77,6 +77,19 @@ def generate_weekly_report(self, user_id: str):
             report.generated_at = now
 
         db.commit()
+        try:
+            top_skills = ", ".join(s["skill_name"] for s in summary_json["skills_active_this_week"][:3]) or "none"
+            slack_text = (
+                f"*DevMind Weekly Summary*\n"
+                f"Week of {week_start_date}\n"
+                f"• {summary_json['totals']['memories']} new memories captured\n"
+                f"• {summary_json['totals']['skills']} skills active (top: {top_skills})\n"
+                f"• {summary_json['totals']['recommendations']} open recommendations\n"
+            )
+            post_message(channel="#general", text=slack_text)
+        except Exception as e:
+            print(f"Slack weekly summary post failed (non-fatal): {e}")
+
         return summary_json["totals"]
 
     except Exception as exc:
