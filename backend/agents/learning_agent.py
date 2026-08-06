@@ -1,4 +1,5 @@
 from typing import TypedDict, Optional
+from langgraph import graph
 from langgraph.graph import StateGraph, START, END
 from tenacity import retry, stop_after_attempt, wait_fixed
 
@@ -13,6 +14,9 @@ from app.config import settings
 
 tavily= TavilyClient(api_key=settings.tavily_api_key)
 import json
+import redis
+
+redis_client = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
 
 
 class LearningAssistantState(TypedDict):
@@ -25,7 +29,7 @@ class LearningAssistantState(TypedDict):
     learning_plan: Optional[str]
     job_market_count: Optional[int]
     decision_log: list[str]
-    web_resources: Optional[list]
+    web_resources: Optional[dict]
 
 def fetch_skill_node(state: LearningAssistantState) -> LearningAssistantState:
     db = SessionLocal()
@@ -164,6 +168,13 @@ If relevant, reference specific resources above by name in your plan.
 
 def search_learning_resources_node(state: LearningAssistantState) -> LearningAssistantState:
     skill = state['skill_name']
+    cache_key = f"web_resources:{skill}"
+
+    cached = redis_client.get(cache_key)
+    if cached:
+        state["web_resources"] = json.loads(cached)
+        state["decision_log"].append(f"Found cached web resources for {skill}")
+        return state
     resources = {"youtube": [], "articles": [], "documentation": []}
     try:
         yt_results = tavily.search(
@@ -176,7 +187,7 @@ def search_learning_resources_node(state: LearningAssistantState) -> LearningAss
             for r in yt_results.get("results", [])
         ]
     except Exception as e:
-        resources = []
+        
         print(f"Tavily search failed (non-fatal): {e}")
         
     try:
@@ -203,9 +214,11 @@ def search_learning_resources_node(state: LearningAssistantState) -> LearningAss
         ]
     except Exception as e:
         print(f"Documentation search failed (non-fatal): {e}") 
-
+        
+    redis_client.setex(cache_key, 86400, json.dumps(resources))
     state["web_resources"] = resources
-    state["decision_log"].append(f"Found {len(resources)} real web resources for {state['skill_name']}")
+    total = sum(len(v) for v in resources.values())
+    state["decision_log"].append(f"Found {total} real web resources for {state['skill_name']}")
     return state
 
 
@@ -223,6 +236,11 @@ def check_job_market_node(state: LearningAssistantState) -> LearningAssistantSta
     state["decision_log"].append(f"Found {len(jobs)} current job postings mentioning this skill")
     return state
 
+def route_after_market(state: LearningAssistantState) -> str:
+    if state.get("mode") == "relearn":
+        return "END"
+    return "search_resources"
+
 
 def build_learning_agent():
     graph = StateGraph(LearningAssistantState)
@@ -234,11 +252,11 @@ def build_learning_agent():
     graph.add_node("next_level", next_level_node)
     graph.add_node("check_market", check_job_market_node)
     graph.add_node("search_resources", search_learning_resources_node)
+    # REMOVED: graph.add_node("route_after_market", route_after_market)
 
     graph.add_edge(START, "fetch_skill")
     graph.add_edge("fetch_skill", "search_memory")
 
-    # The ONE real router, checking relearn mode first
     graph.add_conditional_edges("search_memory", route_learning_mode, {
         "relearn": "relearn_summary",
         "getting_started": "getting_started",
@@ -248,7 +266,14 @@ def build_learning_agent():
     graph.add_edge("relearn_summary", "check_market")
     graph.add_edge("getting_started", "check_market")
     graph.add_edge("next_level", "check_market")
-    graph.add_edge("check_market", "search_resources")
+
+    # REMOVED: graph.add_edge("check_market", "route_after_market")
+    graph.add_conditional_edges(
+        "check_market",
+        route_after_market,
+        {"search_resources": "search_resources", "END": END},
+    )
     graph.add_edge("search_resources", END)
+    # REMOVED: duplicate graph.add_edge("search_resources", END)
 
     return graph.compile()
