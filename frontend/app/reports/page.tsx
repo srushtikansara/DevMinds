@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 type ReportSummary = {
   memories_this_week: { content: string; importance_score: number }[];
   skills_active_this_week: { skill_name: string; proficiency_score: number }[];
   open_recommendations: { content: string; relevance_score: number }[];
   totals: { memories: number; skills: number; recommendations: number };
+  learning_pattern?: string | null;
+  how_to_learn?: string | null;
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -25,17 +27,6 @@ export default function ReportsPage() {
   const [report, setReport] = useState<ReportSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
-  const [learningPattern, setLearningPattern] = useState<{ pattern: string; how_to_learn: string } | null>(null);
-
-   useEffect(() => {
-    fetch(`${API_URL}/profile/learning-pattern`, {
-      headers: { Authorization: `Bearer ${API_KEY}` },
-      cache:"no-store",
-    })
-      .then((res) => res.json())
-      .then(setLearningPattern)
-      .catch(() => setLearningPattern(null));
-  }, []);
 
   async function loadReport() {
     setLoading(true);
@@ -44,6 +35,7 @@ export default function ReportsPage() {
     try {
       const res = await fetch(`${API_URL}/reports/${weekStart}`, {
         headers: { Authorization: `Bearer ${API_KEY}` },
+        cache: "no-store",
       });
       if (res.status === 404) {
         setNotFound(true);
@@ -73,7 +65,10 @@ export default function ReportsPage() {
             onChange={(e) => setWeekStart(e.target.value)}
             className="bg-[#0F1419] border border-[#2A3038] rounded-md px-3 py-2 text-sm"
           />
-          <button onClick={loadReport} className="px-3 py-1.5 rounded-md bg-[#4C8DFF] text-[#0A0E14] font-medium text-sm">
+          <button
+            onClick={loadReport}
+            className="px-3 py-1.5 rounded-md bg-[#4C8DFF] text-[#0A0E14] font-medium text-sm"
+          >
             Load report
           </button>
         </div>
@@ -84,7 +79,7 @@ export default function ReportsPage() {
             No report generated for the week starting {weekStart}.
           </p>
         )}
-        
+
         {report && (
           <div className="space-y-10">
             <div className="grid grid-cols-3 gap-4">
@@ -92,7 +87,6 @@ export default function ReportsPage() {
                 <p className="font-mono text-2xl text-[#4C8DFF]">{report.totals.memories}</p>
                 <p className="text-xs text-[#8A9099] mt-1">Memories this week</p>
               </div>
-              
               <div className="border border-[#1C2128] rounded-lg p-4">
                 <p className="font-mono text-2xl text-[#4C8DFF]">{report.totals.skills}</p>
                 <p className="text-xs text-[#8A9099] mt-1">Skills active</p>
@@ -102,31 +96,34 @@ export default function ReportsPage() {
                 <p className="text-xs text-[#8A9099] mt-1">Open recommendations</p>
               </div>
             </div>
-             {learningPattern?.pattern && (
-  <div className="border border-[#1C2128] rounded-lg p-5 mb-8 bg-[#0F1419]">
-    <h3 className="text-sm font-medium text-[#4C8DFF] mb-3">Your Learning Pattern</h3>
-    <p className="text-sm text-[#E4E7EB] leading-relaxed mb-4">
-      {learningPattern.pattern}
-    </p>
-    {learningPattern.how_to_learn && (
-      <div className="border-t border-[#1C2128] pt-3">
-        <p className="text-xs font-medium text-[#8A9099] mb-1">How to learn best</p>
-        <p className="text-sm text-[#E4E7EB] leading-relaxed">
-          {learningPattern.how_to_learn}
-        </p>
-      </div>
-    )}
-  </div>
-)}
+
+            {report.learning_pattern && (
+              <div className="border border-[#1C2128] rounded-lg p-5 bg-[#0F1419]">
+                <h3 className="text-sm font-medium text-[#4C8DFF] mb-3">Your Learning Pattern</h3>
+                <p className="text-sm text-[#E4E7EB] leading-relaxed mb-4">
+                  {report.learning_pattern}
+                </p>
+                {report.how_to_learn && (
+                  <div className="border-t border-[#1C2128] pt-3">
+                    <p className="text-xs font-medium text-[#8A9099] mb-1">How to learn best</p>
+                    <p className="text-sm text-[#E4E7EB] leading-relaxed">
+                      {report.how_to_learn}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div>
               <h2 className="font-medium mb-3">This week's memories</h2>
               <div className="space-y-2">
                 {report.memories_this_week.map((m, i) => (
-                  <div key={i} className="border border-[#1C2128] rounded-lg p-4 text-sm text-[#8A9099]">
+                  <div
+                    key={i}
+                    className="border border-[#1C2128] rounded-lg p-4 text-sm text-[#8A9099]"
+                  >
                     {m.content}
-                   
                   </div>
-            
                 ))}
               </div>
             </div>
@@ -135,9 +132,11 @@ export default function ReportsPage() {
               <h2 className="font-medium mb-3">Skills active this week</h2>
               <div className="flex flex-wrap gap-2">
                 {report.skills_active_this_week.map((s) => (
-                  <span key={s.skill_name} className="text-xs font-mono px-2 py-1 bg-[#1C2128] rounded">
+                  <span
+                    key={s.skill_name}
+                    className="text-xs font-mono px-2 py-1 bg-[#1C2128] rounded"
+                  >
                     {s.skill_name} · {Math.round(s.proficiency_score * 100)}%
-          
                   </span>
                 ))}
               </div>
@@ -147,7 +146,10 @@ export default function ReportsPage() {
               <h2 className="font-medium mb-3">Open recommendations</h2>
               <div className="space-y-2">
                 {report.open_recommendations.map((r, i) => (
-                  <div key={i} className="border border-[#1C2128] rounded-lg p-4 flex justify-between text-sm">
+                  <div
+                    key={i}
+                    className="border border-[#1C2128] rounded-lg p-4 flex justify-between text-sm"
+                  >
                     <span>{r.content}</span>
                     <span className="text-[#4C8DFF]">{Math.round(r.relevance_score * 100)}%</span>
                   </div>

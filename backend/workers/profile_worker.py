@@ -9,6 +9,7 @@ from app.infrastructure.db.models import DeveloperProfile, Session, Skill, Memor
 def update_developer_profile(self, user_id: str):
     db = SessionLocal()
     try:
+        total_skills_tracked = db.query(Skill).filter(Skill.user_id == user_id).count()
         skills = (
             db.query(Skill)
             .filter(Skill.user_id == user_id)
@@ -46,10 +47,10 @@ def update_developer_profile(self, user_id: str):
         activity_summary = {
             "total_sessions": len(sessions),
             "total_memories": db.query(Memory).filter(Memory.user_id == user_id).count(),
-            "total_skills_tracked": len(skills),
+            "total_skills_tracked": total_skills_tracked,
             "recent_highlights": recent_highlights,
         }
-
+        
         profile = db.query(DeveloperProfile).filter(DeveloperProfile.user_id == user_id).first()
         if profile is None:
             profile = DeveloperProfile(
@@ -67,7 +68,7 @@ def update_developer_profile(self, user_id: str):
             profile.last_computed_at = datetime.now(timezone.utc)
 
         db.commit()
-        return {"skills_tracked": len(skill_summary), "memories": activity_summary["total_memories"]}
+        return {"skills_tracked": total_skills_tracked, "memories": activity_summary["total_memories"]}
 
     except Exception as exc:
         db.rollback()

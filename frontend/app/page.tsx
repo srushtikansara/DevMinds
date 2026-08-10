@@ -63,7 +63,7 @@ export default function ProfilePage() {
 
         <h2 className="font-medium mb-3">Top skills</h2>
         <div className="space-y-2 mb-10">
-          {profile.skill_summary.slice(0, 8).map((s) => (
+          {profile.skill_summary.slice(0, 10).map((s) => (
             <div key={s.skill_name} className="flex items-center gap-3">
               <span className="font-mono text-sm w-32 truncate">{s.skill_name}</span>
               <div className="flex-1 h-1.5 bg-[#1C2128] rounded-full overflow-hidden">
