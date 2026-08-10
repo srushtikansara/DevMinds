@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type ReportSummary = {
   memories_this_week: { content: string; importance_score: number }[];
@@ -25,6 +25,16 @@ export default function ReportsPage() {
   const [report, setReport] = useState<ReportSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [learningPattern, setLearningPattern] = useState<{ pattern: string; how_to_learn: string } | null>(null);
+
+   useEffect(() => {
+    fetch(`${API_URL}/profile/learning-pattern`, {
+      headers: { Authorization: `Bearer ${API_KEY}` },
+    })
+      .then((res) => res.json())
+      .then(setLearningPattern)
+      .catch(() => setLearningPattern(null));
+  }, []);
 
   async function loadReport() {
     setLoading(true);
@@ -73,7 +83,13 @@ export default function ReportsPage() {
             No report generated for the week starting {weekStart}.
           </p>
         )}
-
+        {learningPattern?.pattern && (
+      <div className="learning-pattern-card">
+             <h3>Your Learning Pattern</h3>
+    <p>{learningPattern.pattern}</p>
+    <p><strong>How to learn best:</strong> {learningPattern.how_to_learn}</p>
+  </div>
+)}
         {report && (
           <div className="space-y-10">
             <div className="grid grid-cols-3 gap-4">
@@ -108,6 +124,7 @@ export default function ReportsPage() {
                 {report.skills_active_this_week.map((s) => (
                   <span key={s.skill_name} className="text-xs font-mono px-2 py-1 bg-[#1C2128] rounded">
                     {s.skill_name} · {Math.round(s.proficiency_score * 100)}%
+          
                   </span>
                 ))}
               </div>
