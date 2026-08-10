@@ -42,21 +42,35 @@ export default function SkillsPage() {
           Tracked from real events across all your connected tools.
         </p>
 
-        <div className="flex items-end gap-2 h-48 mb-10 border-b border-[#1C2128] pb-2">
-  {skills.map((s) => (
-    <div key={s.skill_name} className="flex-1 flex flex-col items-center justify-end gap-2 group relative">
-      <span className="text-xs font-mono text-[#4C8DFF] opacity-0 group-hover:opacity-100 transition-opacity">
-        {Math.round(s.proficiency_score * 100)}%
-      </span>
-      <div
-        className="w-full bg-[#4C8DFF] rounded-t"
-        style={{ height: `${Math.max((s.proficiency_score / maxProficiency) * CHART_HEIGHT, 4)}px` }}
-      />
-      <span className="text-[10px] text-[#8A9099] rotate-45 origin-top-left whitespace-nowrap mt-1">
-        {s.skill_name}
-      </span>
-    </div>
-  ))}
+       <div className="flex items-end gap-2 h-48 mb-10 border-b border-[#1C2128] pb-2">
+  {skills.map((s) => {
+    const score = s.proficiency_score;
+    const tierColor =
+      score >= 0.75 ? "#4C8DFF" :   // high — blue
+      score >= 0.45 ? "#8B7FE8" :   // mid — soft purple
+      "#5A6572";                    // low — muted gray
+
+    return (
+      <div key={s.skill_name} className="flex-1 flex flex-col items-center justify-end gap-2 group relative">
+        <span
+          className="text-xs font-mono opacity-0 group-hover:opacity-100 transition-opacity"
+          style={{ color: tierColor }}
+        >
+          {Math.round(score * 100)}%
+        </span>
+        <div
+          className="w-full rounded-t transition-all"
+          style={{
+            height: `${Math.max((score / maxProficiency) * CHART_HEIGHT, 4)}px`,
+            backgroundColor: tierColor,
+          }}
+        />
+        <span className="text-[10px] text-[#8A9099] rotate-45 origin-top-left whitespace-nowrap mt-1">
+          {s.skill_name}
+        </span>
+      </div>
+    );
+  })}
 </div>
 
         <h2 className="font-medium mb-3">What to learn next</h2>
