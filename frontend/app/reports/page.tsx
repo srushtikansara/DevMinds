@@ -30,6 +30,7 @@ export default function ReportsPage() {
    useEffect(() => {
     fetch(`${API_URL}/profile/learning-pattern`, {
       headers: { Authorization: `Bearer ${API_KEY}` },
+      cache:"no-store",
     })
       .then((res) => res.json())
       .then(setLearningPattern)
@@ -83,13 +84,7 @@ export default function ReportsPage() {
             No report generated for the week starting {weekStart}.
           </p>
         )}
-        {learningPattern?.pattern && (
-      <div className="learning-pattern-card">
-             <h3>Your Learning Pattern</h3>
-    <p>{learningPattern.pattern}</p>
-    <p><strong>How to learn best:</strong> {learningPattern.how_to_learn}</p>
-  </div>
-)}
+        
         {report && (
           <div className="space-y-10">
             <div className="grid grid-cols-3 gap-4">
@@ -97,6 +92,7 @@ export default function ReportsPage() {
                 <p className="font-mono text-2xl text-[#4C8DFF]">{report.totals.memories}</p>
                 <p className="text-xs text-[#8A9099] mt-1">Memories this week</p>
               </div>
+              
               <div className="border border-[#1C2128] rounded-lg p-4">
                 <p className="font-mono text-2xl text-[#4C8DFF]">{report.totals.skills}</p>
                 <p className="text-xs text-[#8A9099] mt-1">Skills active</p>
@@ -106,14 +102,31 @@ export default function ReportsPage() {
                 <p className="text-xs text-[#8A9099] mt-1">Open recommendations</p>
               </div>
             </div>
-
+             {learningPattern?.pattern && (
+  <div className="border border-[#1C2128] rounded-lg p-5 mb-8 bg-[#0F1419]">
+    <h3 className="text-sm font-medium text-[#4C8DFF] mb-3">Your Learning Pattern</h3>
+    <p className="text-sm text-[#E4E7EB] leading-relaxed mb-4">
+      {learningPattern.pattern}
+    </p>
+    {learningPattern.how_to_learn && (
+      <div className="border-t border-[#1C2128] pt-3">
+        <p className="text-xs font-medium text-[#8A9099] mb-1">How to learn best</p>
+        <p className="text-sm text-[#E4E7EB] leading-relaxed">
+          {learningPattern.how_to_learn}
+        </p>
+      </div>
+    )}
+  </div>
+)}
             <div>
               <h2 className="font-medium mb-3">This week's memories</h2>
               <div className="space-y-2">
                 {report.memories_this_week.map((m, i) => (
                   <div key={i} className="border border-[#1C2128] rounded-lg p-4 text-sm text-[#8A9099]">
                     {m.content}
+                   
                   </div>
+            
                 ))}
               </div>
             </div>
