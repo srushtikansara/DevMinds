@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session as DBSession
 from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel
 
-from app.infrastructure.db.session import get_db
+from app.infrastructure.db.session import SessionLocal, get_db
 from app.infrastructure.db.models import Session as SessionModel, Connector, User , Memory,Recommendation,CareerRecommendation,JobPosting,Resume
 from app.infrastructure.embeddings.gemini_embeddings import get_embedding 
 from app.infrastructure.vectorstore.chroma_client import find_similar
@@ -173,6 +173,22 @@ def get_profile(user: User = Depends(get_current_user),db: DBSession = Depends(g
         "last_computed_at": profile.last_computed_at,
     }
     
+@router.get("/profile/learning-pattern")
+def get_learning_pattern(user: User = Depends(get_current_user), db: DBSession = Depends(get_db)):
+    latest_report = (
+        db.query(WeeklyReport)
+        .filter(WeeklyReport.user_id == user.id)
+        .order_by(WeeklyReport.generated_at.desc())
+        .first()
+    )
+    db.close()
+    if not latest_report or not latest_report.summary_json.get("learning_pattern"):
+        return{"pattern":None , "how_to_learn":None}
+    return {
+        "pattern": latest_report.summary_json.get("learning_pattern"),
+        "how_to_learn": latest_report.summary_json.get("how_to_learn")
+    }
+       
 @router.get("/reports/{week_start}")
 def get_weekly_report( week_start: date,user: User = Depends(get_current_user) , db: DBSession = Depends(get_db)):
    

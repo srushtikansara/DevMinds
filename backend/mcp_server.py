@@ -14,9 +14,12 @@ TIMEOUT = 10  # seconds - fail fast instead of hanging forever
 
 @mcp.tool()
 def get_developer_profile() -> dict:
-    """Get the user's current developer profile: tracked skills and recent activity highlights."""
-    response = requests.get(f"{API_URL}/profile", headers=HEADERS, timeout=TIMEOUT)
-    return response.json()
+    """Get the user's current developer profile: tracked skills and recent activity highlights and learning patterns."""
+    profile_response = requests.get(f"{API_URL}/profile", headers=HEADERS, timeout=TIMEOUT)
+    pattern_response = requests.get(f"{API_URL}/profile/learning-pattern", headers=HEADERS, timeout=TIMEOUT)
+    data = profile_response.json()
+    data["learning_pattern"] = pattern_response.json()
+    return data
 
 
 @mcp.tool()
@@ -83,6 +86,8 @@ def log_to_notion(title:str,content:str) ->dict:
         return response.json()
     except Exception as e:
         return {"status": "error", "message": str(e)}
+    
+
 
 if __name__ == "__main__":
     mcp.run()
