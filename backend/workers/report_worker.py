@@ -1,5 +1,4 @@
 from datetime import datetime, timezone, timedelta
-from pydoc import text
 from app.infrastructure.slack.slack_client import post_message
 from app.infrastructure.queue.celery_app import celery_app
 from app.infrastructure.db.session import SessionLocal
@@ -50,13 +49,16 @@ HOW TO LEARN: <sentence>
 
     return {"pattern": pattern_line or text, "how_to_learn": how_to_learn_line}
     
-
 @celery_app.task(name="generate_weekly_report", bind=True, max_retries=3, default_retry_delay=10)
-def generate_weekly_report(self, user_id: str):
+def generate_weekly_report(self, user_id: str, target_week_start: str | None = None):
     db = SessionLocal()
     try:
         now = datetime.now(timezone.utc)
-        week_start_date = (now - timedelta(days=now.weekday())).date()
+        if target_week_start:
+            week_start_date = datetime.strptime(target_week_start, "%Y-%m-%d").date()
+        else:
+            week_start_date = (now - timedelta(days=now.weekday())).date()
+
         week_start_dt = datetime.combine(week_start_date, datetime.min.time(), tzinfo=timezone.utc)
 
         week_memories = (
@@ -68,7 +70,10 @@ def generate_weekly_report(self, user_id: str):
 
         week_skills = (
             db.query(Skill)
-            .filter(Skill.user_id == user_id, Skill.last_updated >= week_start_dt)
+            .join(SkillEvent, SkillEvent.skill_id == Skill.id)
+            .join(DeveloperEvent, DeveloperEvent.id == SkillEvent.developer_event_id)
+            .filter(Skill.user_id == user_id, DeveloperEvent.occurred_at >= week_start_dt)
+            .distinct()
             .order_by(Skill.proficiency_score.desc())
             .all()
         )
@@ -105,7 +110,6 @@ def generate_weekly_report(self, user_id: str):
         }
 
         learning_analysis = analyze_learning_patterns(db, user_id)
-        learning_analysis = analyze_learning_patterns(db, user_id)
         summary_json["learning_pattern"] = learning_analysis["pattern"] if learning_analysis else None
         summary_json["how_to_learn"] = learning_analysis["how_to_learn"] if learning_analysis else None
 
@@ -122,23 +126,11 @@ def generate_weekly_report(self, user_id: str):
             report.generated_at = now
 
         db.commit()
-
-        try:
-            top_skills = ", ".join(s["skill_name"] for s in summary_json["skills_active_this_week"][:3]) or "none"
-            slack_text = (
-                f"*DevMind Weekly Summary*\n"
-                f"Week of {week_start_date}\n"
-                f"• {summary_json['totals']['memories']} new memories captured\n"
-                f"• {summary_json['totals']['skills']} skills active (top: {top_skills})\n"
-                f"• {summary_json['totals']['recommendations']} open recommendations\n"
-            )
-        except Exception as e:
-            print(f"Slack weekly summary post failed (non-fatal): {e}")
-
         return summary_json["totals"]
-    
+
     except Exception as exc:
         db.rollback()
         raise self.retry(exc=exc)
     finally:
         db.close()
+    
