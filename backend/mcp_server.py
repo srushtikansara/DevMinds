@@ -86,7 +86,6 @@ def log_to_notion(title:str,content:str) ->dict:
         return response.json()
     except Exception as e:
         return {"status": "error", "message": str(e)}
-    
 
 
 if __name__ == "__main__":

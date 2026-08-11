@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel
 
 from app.infrastructure.db.session import SessionLocal, get_db
-from app.infrastructure.db.models import Session as SessionModel, Connector, User , Memory,Recommendation,CareerRecommendation,JobPosting,Resume
+from app.infrastructure.db.models import Session as SessionModel, Connector, User , Memory,Recommendation,CareerRecommendation,JobPosting,Resume,SkillEvent,DeveloperEvent,Skill
 from app.infrastructure.embeddings.gemini_embeddings import get_embedding 
 from app.infrastructure.vectorstore.chroma_client import find_similar
 from app.infrastructure.db.models import DeveloperProfile,WeeklyReport
@@ -25,6 +25,7 @@ from datetime import date
 from workers.parser_worker import parse_session
 from app.infrastructure.gmail.gmail_client import create_followup_draft
 from app.config import settings
+
 
 
 router = APIRouter()
@@ -251,6 +252,7 @@ def get_learning_coaching_result(task_id: str):
     if not result.ready():
         return {"status": "pending"}
     return {"status": "complete", "result": result.result}
+
 
 @router.post("/resumes/upload",status_code=201)
 def upload_resume(
