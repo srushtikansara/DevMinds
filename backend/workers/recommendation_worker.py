@@ -16,6 +16,12 @@ def generate_recommendation(self, user_id: str):
 
         if not established_skills:
             return 0
+        
+        db.query(Recommendation).filter(
+            Recommendation.user_id == user_id, Recommendation.actioned == False
+        ).delete()
+        db.commit()
+
 
         skill_summary = [
             {"skill_name": s.skill_name, "proficiency_score": s.proficiency_score, "signal_count": s.signal_count}
