@@ -4,7 +4,12 @@ from app.infrastructure.queue.celery_app import celery_app
 from app.infrastructure.db.session import SessionLocal
 from app.infrastructure.db.models import Memory, Skill, Recommendation, WeeklyReport, DeveloperEvent, SkillEvent
 from app.infrastructure.llm.gemini_provider import client
+from pydantic import BaseModel
 
+class LearningPatternAnalysis(BaseModel):
+    pattern: str
+    how_to_learn: str
+    
 def analyze_learning_patterns(db, user_id: str) -> str | None:
     events = (
         db.query(DeveloperEvent.description, Skill.skill_name)
@@ -25,29 +30,25 @@ def analyze_learning_patterns(db, user_id: str) -> str | None:
 
 Do two things, based ONLY on real evidence in these events:
 
-1. PATTERN: Describe, in one clear sentence, a genuine, consistent pattern in HOW this
-developer approaches learning/problem-solving - or say "No consistent pattern - approach
-varies by domain" if it genuinely varies.
+1. Describe, in one clear sentence, a genuine, consistent pattern in HOW this
+developer approaches learning/problem-solving - or say "No consistent pattern -
+approach varies by domain" if it genuinely varies.
 
-2. HOW TO LEARN: Based on that pattern (or lack of one), give ONE concrete, actionable
-sentence of advice on how this developer should approach learning a NEW skill, given their
-demonstrated real style. Be specific and practical, not generic.
+2. Give ONE concrete, actionable sentence of advice on how this developer should
+approach learning a NEW skill, given their demonstrated real style. Be specific
+and practical, not generic.
 
-Respond in exactly this format:
-PATTERN: <sentence>
-HOW TO LEARN: <sentence>
 """
-    response = client.models.generate_content(model="gemini-3.5-flash", contents=prompt)
-    text = str(response.text).strip()
-    pattern_line = ""
-    how_to_learn_line = ""
-    for line in text.splitlines():
-        if line.startswith("PATTERN:"):
-            pattern_line = line.replace("PATTERN:", "").strip()
-        elif line.startswith("HOW TO LEARN:"):
-            how_to_learn_line = line.replace("HOW TO LEARN:", "").strip()
-
-    return {"pattern": pattern_line or text, "how_to_learn": how_to_learn_line}
+    response = client.models.generate_content(
+        model="gemini-3.5-flash",
+        contents=prompt,
+        config={
+            "response_mime_type": "application/json",
+            "response_schema": LearningPatternAnalysis,
+        }
+    )
+    result: LearningPatternAnalysis = response.parsed
+    return {"pattern": result.pattern, "how_to_learn": result.how_to_learn}
     
 @celery_app.task(name="generate_weekly_report", bind=True, max_retries=3, default_retry_delay=10)
 def generate_weekly_report(self, user_id: str, target_week_start: str | None = None):
