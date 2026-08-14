@@ -494,7 +494,18 @@ def office_draft_email(body: DraftEmailRequest, user: User = Depends(get_current
         return {"status": "drafted", "draft_id": draft_id}
     except Exception as e:
         raise HTTPException(500, f"Failed to create draft: {str(e)}")
-    
+# --------------------
+@router.post("/learning/path-progress")
+def get_path_progress(skills: list[str], user: User = Depends(get_current_user)):
+    from agents.learning_agent import check_learning_path_progress
+    return check_learning_path_progress(skills, user.id)
+
+@router.post("/learning/suggest-path")
+def suggest_path(goal: str, user: User = Depends(get_current_user)):
+    from agents.learning_agent import suggest_learning_path
+    return suggest_learning_path(goal, user.id)
+# --------------------
+
 @router.post("/office/notion-log")
 def office_log_notion(body: NotionLogRequest, user: User = Depends(get_current_user)):
     try:

@@ -1,9 +1,8 @@
 from typing import TypedDict, Optional
-from urllib import response
+from anthropic import BaseModel
 from langgraph import graph
 from langgraph.graph import StateGraph, START, END
 from tenacity import retry, stop_after_attempt, wait_fixed
-
 from app.infrastructure.db.session import SessionLocal
 from app.infrastructure.db.models import Skill,DeveloperEvent, SkillEvent, Memory
 from app.infrastructure.embeddings.gemini_embeddings import get_embedding
@@ -11,6 +10,7 @@ from app.infrastructure.vectorstore.chroma_client import find_similar
 from app.infrastructure.llm.gemini_provider import client
 from app.infrastructure.jobs.himalayas_client import search_jobs
 from tavily import TavilyClient
+from pydantic import BaseModel, Field
 from app.config import settings
 
 tavily= TavilyClient(api_key=settings.tavily_api_key)
@@ -19,6 +19,16 @@ import redis
 
 redis_client = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
 
+    
+class NextStep(BaseModel):
+    topic: str
+    why: str
+    how:str= Field(description="How to approach learning this. MUST explicitly name and include the actual URL of one relevant resource from the provided learning resources list, inline in this text.")
+    
+class RelearnSummary(BaseModel):
+    tracked_history: str
+    general_knowledge: str
+    next_steps: list[NextStep]
 
 class LearningAssistantState(TypedDict):
     user_id: str
@@ -105,31 +115,42 @@ Real, current learning resources found for this skill:
 
 Write your response in THREE clearly separated parts:
 
-PART 1 - What you've actually done (tracked history):
-Give a DETAILED summary of exactly what DevMind has real evidence you covered, based
-ONLY on the sources above - specific files, specific bugs, specific decisions. If
-there's little or no direct evidence, say so honestly.
+Provide:
+1. A DETAILED summary of exactly what DevMind has real evidence you covered
+   (tracked_history) - specific files, specific bugs, specific decisions. If there's
+   little or no direct evidence, say so honestly.
+2. Core concepts a developer at this level would typically know (general_knowledge) -
+   clearly this is general knowledge, NOT verified from tracked work.
+3. 2-3 specific next_steps to deepen this skill. For each: explain why it's the right
+   next step given what's already been done, explain how to approach learning it
+   (matching their real style if evident), and within the "how" field, explicitly
+   name and reference at least one resource from the learning resources above if one
+   is genuinely relevant to that specific topic.
 
-PART 2 - General knowledge on {state['skill_name']} (not from your tracked history):
-Briefly outline core concepts a developer at this level would typically know, clearly
-labeled as general knowledge, not verified from their tracked work.
-
-PART 3 - What to learn next, and how:
-Based on Parts 1 and 2 together, recommend 2-3 SPECIFIC next topics to deepen this
-skill. For each one:
-- Explain WHY it's the right next step given what they've already done
-- Explain HOW to approach learning it (their real style, if evident from tracked work)
-- You MUST explicitly name and link at least one resource from the "Real, current
-  learning resources" section above, inline, within your explanation of that step -
-  choose whichever resource is most relevant to that specific topic. Do not describe
-  the topic generically and leave the resources unreferenced; do not just list them
-  separately at the end.
-
-Do not blend the three parts together - keep clear headers and keep "verified from
-your work" separate from "general knowledge" throughout.
 """
-    response = client.models.generate_content(model="gemini-3.5-flash", contents=prompt)
-    summary_text = response.text
+    response = client.models.generate_content(
+        model="gemini-3.5-flash",
+        contents=prompt,
+        config= {
+            "response_mime_type": "application/json",
+            "response_schema": RelearnSummary,
+        })
+    result: RelearnSummary = response.parsed
+    
+    next_steps_text = "\n\n".join(
+        f"**{i+1}. {step.topic}**\nWhy: {step.why}\nHow: {step.how}"
+        for i, step in enumerate(result.next_steps)
+    )
+    
+    summary_text = f"""### PART 1 - What you've actually done (tracked history)
+{result.tracked_history}
+
+### PART 2 - General knowledge on {state['skill_name']} (not from your tracked history)
+{result.general_knowledge}
+
+### PART 3 - What to learn next, and how
+{next_steps_text}
+"""
 
     if state.get("linked_events"):
         events_list = "\n".join(f"- {e}" for e in state["linked_events"])
@@ -138,7 +159,6 @@ your work" separate from "general knowledge" throughout.
         summary_text += "\n\n---\n**No directly linked events found for this skill yet.**"
 
     state["learning_plan"] = summary_text
-    state["decision_log"].append("Generated full relearn summary (tracked + general + next steps)")
     return state
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(10))
@@ -253,6 +273,83 @@ def search_learning_resources_node(state: LearningAssistantState) -> LearningAss
     state["decision_log"].append(f"Found {total} real web resources for {state['skill_name']}")
     return state
 
+def check_learning_path_progress(skill_path: list[str], user_id: str) -> dict:
+    db = SessionLocal()
+    try:
+        results = []
+        for skill_name in skill_path:
+            skill = (
+                db.query(Skill)
+                .filter(Skill.user_id == user_id, Skill.skill_name.ilike(skill_name))
+                .first()
+            )
+
+            linked_count = 0
+            signal_count = 0
+            if skill:
+                linked_count = db.query(SkillEvent).filter(SkillEvent.skill_id == skill.id).count()
+                signal_count = skill.signal_count
+
+            if linked_count >= 3:
+                status = "learned"
+            elif linked_count >= 1:
+                status = "some_exposure"
+            elif signal_count > 0:
+                status = "minimal_signal"
+            else:
+                status = "not_started"
+
+            results.append({
+                "skill_name": skill_name,
+                "status": status,
+                "linked_events": linked_count,
+                "signal_count": signal_count,
+            })
+
+        gaps = [r["skill_name"] for r in results if r["status"] in ("not_started", "minimal_signal")]
+        return {"path": results, "next_gap": gaps[0] if gaps else None}
+    finally:
+        db.close()
+        
+def suggest_learning_path(goal: str, user_id: str) -> dict:
+    prompt = f"""A developer wants to achieve this goal: "{goal}"
+
+Propose an ordered list of 3-6 specific, foundational-to-advanced skills or
+technologies they should learn, in the order that makes sense for genuinely
+building toward this goal. Use real, specific, well-known skill/technology
+names (e.g. "langchain", "langgraph", "postgresql"), not vague phrases.
+
+Respond as a JSON array of lowercase skill names only, in order, like:
+["python", "langchain", "langgraph", "mcp"]
+"""
+    response = client.models.generate_content(model="gemini-3.5-flash", contents=prompt)
+    text = str(response.text).strip()
+
+    import re, json as jsonlib
+    match = re.search(r"\[.*\]", text, re.DOTALL)
+    if not match:
+        return {"error": "Could not parse a valid skill path from the model's response"}
+
+    try:
+        suggested_order = jsonlib.loads(match.group(0))
+    except jsonlib.JSONDecodeError:
+        return {"error": "Could not parse a valid skill path from the model's response"}
+
+    progress = check_learning_path_progress(suggested_order, user_id)
+
+    next_recommended = None
+    for entry in progress["path"]:
+        if entry["status"] in ("not_started", "minimal_signal"):
+            next_recommended = entry["skill_name"]
+            break
+
+    return {
+        "goal": goal,
+        "suggested_order": suggested_order,
+        "order_note": "This order is general, common-practice guidance - not personalized to your history.",
+        "your_real_progress": progress["path"],
+        "recommended_next": next_recommended,
+    }
 
 def getting_started_node(state):
     return generate_plan_node(state, "getting_started")

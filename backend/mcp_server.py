@@ -87,6 +87,23 @@ def log_to_notion(title:str,content:str) ->dict:
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+@mcp.tool()
+def check_path_progress(skills: list[str]) -> dict:
+    """Check which skills in a given learning path are already covered by real tracked evidence (linked events), and which are still gaps. Pass skills in the order you'd learn them, e.g. ['langchain', 'langgraph', 'mcp']."""
+    try:
+        response = requests.post(f"{API_URL}/learning/path-progress", json=skills, headers=HEADERS, timeout=TIMEOUT)
+        return response.json()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@mcp.tool()
+def suggest_learning_path(goal: str) -> dict:
+    """Given a learning goal (e.g. 'build agentic AI systems'), suggests a common, general skill order toward it, then checks your real tracked evidence against each step to show what's genuinely done and what's next."""
+    try:
+        response = requests.post(f"{API_URL}/learning/suggest-path", params={"goal": goal}, headers=HEADERS, timeout=TIMEOUT)
+        return response.json()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
     mcp.run()
