@@ -9,7 +9,7 @@ from pydantic import BaseModel
 class LearningPatternAnalysis(BaseModel):
     pattern: str
     how_to_learn: str
-    
+
 def analyze_learning_patterns(db, user_id: str) -> str | None:
     events = (
         db.query(DeveloperEvent.description, Skill.skill_name)
