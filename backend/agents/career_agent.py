@@ -52,7 +52,7 @@ def should_pursue(state:CareerAgentState) -> CareerAgentState:
 
 def search_memory_node(state:CareerAgentState) -> CareerAgentState:
     query_vector = get_embedding(state["job_description"][:500], task_type="RETRIEVAL_QUERY")
-    matches = find_similar(query_vector, top_k=5)
+    matches = find_similar(query_vector, user_id=state["user_id"], top_k=5)
     state["similar_past_work"] = matches
     state["decision_log"].append(f"Found {len(matches)} similar past memories")
     return state

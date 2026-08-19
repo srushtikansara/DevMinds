@@ -15,7 +15,7 @@ def process_memory(self,developer_event_id:str):
             raise ValueError(f"DeveloperEvent {developer_event_id} not found")
         
         vector = get_embedding(event.description,task_type="RETRIEVAL_DOCUMENT")
-        candidates = find_similar(vector,top_k=2)
+        candidates = find_similar(vector, user_id=event.user_id, top_k=2)
         
         if candidates:
             best_match = candidates[0]
@@ -40,7 +40,7 @@ def process_memory(self,developer_event_id:str):
         db.commit()
         db.refresh(memory)
         
-        add_embedding(memory.id,vector,memory.content)
+        add_embedding(memory.id, vector, memory.content, user_id=event.user_id)
         embedding_row= Embedding(
             memory_id = memory.id,
             chroma_id = memory.id,

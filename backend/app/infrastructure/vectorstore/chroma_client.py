@@ -4,19 +4,21 @@ client = chromadb.HttpClient(host="localhost", port=8001)
 
 collection = client.get_or_create_collection(name="memmories")
 
-def add_embedding(memmory_id:str,vector:list[dict],text:str):
-    """Store a memory'vector,indexed by its memory_id"""
+def add_embedding(memmory_id: str, vector: list[dict], text: str, user_id: str):
+    """Store a memory's vector, indexed by its memory_id, tagged with the owning user"""
     collection.add(
         ids=[memmory_id],
         embeddings=[vector],
         documents=[text],
+        metadatas=[{"user_id": user_id}],
     )
-    
-def find_similar(vector:list[float],top_k:int=3) -> list[dict]:
-    """Find the closest existing memories to a given vector"""
+
+def find_similar(vector: list[float], user_id: str, top_k: int = 3) -> list[dict]:
+    """Find the closest existing memories to a given vector, scoped to one user"""
     results = collection.query(
         query_embeddings=[vector],
         n_results=top_k,
+        where={"user_id": user_id},
     )
     
     matches=[]

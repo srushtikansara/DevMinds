@@ -72,7 +72,7 @@ def fetch_skill_node(state: LearningAssistantState) -> LearningAssistantState:
 
 def search_related_memory_node(state: LearningAssistantState) -> LearningAssistantState:
     query_vector = get_embedding(state['skill_name'], task_type="RETRIEVAL_QUERY")
-    matches = find_similar(query_vector, top_k=3)
+    matches = find_similar(query_vector, user_id=state["user_id"], top_k=3)
     
     relevant_matches = [m for m in matches if (1 - m.get("distance", 1)) >= 0.5]
     state['related_memories'] = relevant_matches

@@ -17,6 +17,7 @@ from app.infrastructure.db.models import DeveloperProfile,WeeklyReport
 from app.infrastructure.llm.gemini_provider import tailor_resume_for_job
 from app.interfaces.http.auth import get_current_user
 from app.infrastructure.notion.notion_client import log_application,notion
+from app.infrastructure import db
 from workers.resume_worker import generate_resume
 from fastapi.responses import FileResponse
 from workers.agent_worker import run_learning_agent
@@ -136,13 +137,13 @@ def search_name(q: str, user: User = Depends(get_current_user) ,db: DBSession = 
 
     query_vector = get_embedding(q, task_type="RETRIEVAL_QUERY")
 
-    matches = find_similar(query_vector, top_k=10)
+    matches = find_similar(query_vector, user_id=user.id, top_k=10)
 
     results = []
 
     for match in matches:
         try:
-            memory = db.query(Memory).filter(Memory.id == match["memory_id"]).first()
+            memory = db.query(Memory).filter(Memory.id == match["memory_id"], Memory.user_id == user.id).first()
         except Exception:
             db.rollback()
             continue  
@@ -210,7 +211,10 @@ def get_weekly_report( week_start: date,user: User = Depends(get_current_user) ,
     }
 
 @router.get("/resumes/{resume_id}/download")
-def download_resume(resume_id:str,user: User =Depends(get_current_user)):
+def download_resume(resume_id: str, user: User = Depends(get_current_user), db: DBSession = Depends(get_db)):
+    resume = db.query(Resume).filter(Resume.id == resume_id, Resume.user_id == user.id).first()
+    if resume is None:
+        raise HTTPException(404, "Resume not found")
     file_path = f"generated_resumes/resume_{resume_id}.docx"
     if not os.path.exists(file_path):
         raise HTTPException(404, "Resume file not found")
@@ -310,6 +314,14 @@ def list_resumes(user:User = Depends(get_current_user),db:DBSession =Depends(get
         ]
     }   
 
+@router.get("/resumes/suggest-position")
+def suggest_position_endpoint(user: User = Depends(get_current_user), db: DBSession = Depends(get_db)):
+    profile = db.query(DeveloperProfile).filter(DeveloperProfile.user_id == user.id).first()
+    if profile is None or not profile.skill_summary:
+        raise HTTPException(404, "Profile not yet computed")
+    from app.infrastructure.llm.gemini_provider import suggest_target_position
+    return suggest_target_position(profile.skill_summary)
+
 @router.get("/resumes/{resume_id}")
 def get_resume_detail(resume_id:str, user:User = Depends(get_current_user),db: DBSession = Depends(get_db)):
     resume = db.query(Resume).filter(Resume.id == resume_id,  Resume.user_id == user.id).first()
@@ -322,7 +334,7 @@ def get_resume_detail(resume_id:str, user:User = Depends(get_current_user),db: D
         "content_json": resume.content_json,
         "created_at": resume.created_at,
     }
-    
+
 @router.post("/career/matches/{recommendation_id}/reject")
 def reject_match(recommendation_id:str , user: User =Depends(get_current_user),db:DBSession = Depends(get_db)):
     recommendation = (
