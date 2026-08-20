@@ -19,6 +19,7 @@ def generate_resume(self,user_id:str,personal_info:dict):
             skill_summary=profile.skill_summary,
             recent_highlights=profile.activity_summary.get("recent_highlights",[]),
             roles=personal_info["roles"],
+            target_position=personal_info.get("target_position", ""),
         )
         content["contact_info"] = {
             "full_name": personal_info["full_name"],
@@ -28,6 +29,8 @@ def generate_resume(self,user_id:str,personal_info:dict):
             "portfolio_url": personal_info["portfolio_url"],
         }
         content["education"] = personal_info["education"]
+        content["certificates"] = personal_info.get("certificates", [])
+        content["target_position"] = personal_info.get("target_position", "")
         
         resume = Resume(
             user_id = user_id,
@@ -38,7 +41,7 @@ def generate_resume(self,user_id:str,personal_info:dict):
         db.add(resume)
         db.commit()
         db.refresh(resume)
-        file_path = build_resume_docx(content, resume.id)
+        file_path = build_resume_docx(content, resume.id, template=personal_info.get("template"))
         return resume.id
     
     except Exception as exc:

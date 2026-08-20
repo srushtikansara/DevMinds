@@ -292,14 +292,21 @@ TAILORED_RESUME_SCHEMA = {
     }
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(10))
-def tailor_resume_for_job(base_resume_content: dict, job_title: str, job_description: str, model: str = "gemini-3.5-flash"):
-    
+def tailor_resume_for_job(base_resume_content: dict, job_title: str, job_description: str, skill_summary: list[dict] = None, model: str = "gemini-3.5-flash"):
+
     if "raw_text" in base_resume_content:
         base_context = base_resume_content["raw_text"][:200]
     else:
-        base_summary = base_resume_content.get("summary","")
-        base_skills = ",".join(base_resume_content.get("skills",[]))
-        base_context = f"Summary: {base_summary}\n Skills: {base_skills}"
+        base_summary = base_resume_content.get("summary", "")
+        if skill_summary:
+            base_skills = ", ".join(
+                f"{s['skill_name']} ({round(s['proficiency_score']*100)}% proficiency, "
+                f"{s.get('signal_count', 0)} real tracked signals)"
+                for s in skill_summary
+            )
+        else:
+            base_skills = ",".join(base_resume_content.get("skills", []))
+        base_context = f"Summary: {base_summary}\n Real, current tracked skills: {base_skills}"
 
     
     prompt = f"""A developer has this existing resume summary and skill list:
@@ -310,9 +317,14 @@ Job Title: {job_title}
 Description: {job_description[:2000]}
 
 Rewrite a tailored 2-3 sentence summary emphasizing the parts of this developer's
-background most relevant to THIS specific job. List which of their existing skills
-are most worth highlighting for this role. Add one honest sentence noting any
-genuine gaps between their background and this role's requirements.
+background most relevant to THIS specific job, prioritizing skills with strong real
+evidence (high proficiency and signal count) over ones with minimal signal. List
+which of their existing skills are most worth highlighting for this role. Then,
+based on the job's actual stated requirements versus the developer's real, tracked
+skill evidence above, identify the SPECIFIC skill(s) required by this job that the
+developer has weak or no real evidence for, and name them explicitly - do not give
+a vague, generic gap statement.
+
 """
 
     response = client.models.generate_content(

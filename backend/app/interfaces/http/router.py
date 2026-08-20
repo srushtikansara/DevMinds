@@ -397,10 +397,12 @@ def prepare_application(recommendation_id: str, user: User = Depends(get_current
     if base_resume is None:
         raise HTTPException(400, "No base resume - generate a resume first before preparing an application")
 
+    profile = db.query(DeveloperProfile).filter(DeveloperProfile.user_id == user.id).first()
     tailored_content = tailor_resume_for_job(
         base_resume_content=base_resume.content_json,
         job_title=posting.title,
-        job_description=posting.description
+        job_description=posting.description,
+        skill_summary=profile.skill_summary if profile else None,
     )
 
     tailored_resume = Resume(
