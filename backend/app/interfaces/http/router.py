@@ -251,7 +251,7 @@ def get_learning_coaching(skill_name: str,  relearn: bool = False, user: User = 
 
 
 @router.get("/learning/coach/result/{task_id}")
-def get_learning_coaching_result(task_id: str):
+def get_learning_coaching_result(task_id: str, user: User = Depends(get_current_user)):
     result = celery_app.AsyncResult(task_id)
     if not result.ready():
         return {"status": "pending"}
