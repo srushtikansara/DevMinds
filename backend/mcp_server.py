@@ -37,6 +37,15 @@ def get_recommendations() -> dict:
 
 
 @mcp.tool()
+def suggest_target_position() -> dict:
+    """Suggest a target job position/title for the developer's resume, based purely on their real, tracked skill profile - not a generic guess."""
+    try:
+        response = requests.get(f"{API_URL}/resumes/suggest-position", headers=HEADERS, timeout=TIMEOUT)
+        return response.json()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    
+@mcp.tool()
 def get_career_matches() -> dict:
     """Get the user's current job/internship recommendations from real job postings, ranked by fit_score."""
     response = requests.get(f"{API_URL}/career/matches", headers=HEADERS, timeout=TIMEOUT)

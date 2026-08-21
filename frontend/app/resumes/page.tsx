@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 type Resume = { id: string; source: string; version: number; created_at: string };
 type Role = { title: string; context: string; start_date: string; end_date: string; type: "experience" | "project" };
 type Education = { degree: string; institution: string; graduation_date: string };
+type Certificate = { name: string; issuer: string; date: string };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY;
@@ -30,9 +31,11 @@ export default function ResumesPage() {
   const [phone, setPhone] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
   const [portfolioUrl, setPortfolioUrl] = useState("");
+  const [targetPosition, setTargetPosition] = useState("");
 
   const [education, setEducation] = useState<Education[]>([{ degree: "", institution: "", graduation_date: "" }]);
   const [roles, setRoles] = useState<Role[]>([{ title: "", context: "", start_date: "", end_date: "Present", type: "project" }]);
+  const [certificates, setCertificates] = useState<Certificate[]>([{ name: "", issuer: "", date: "" }]);
   const displayResumes = resumes.filter((r) => r.source !== "tailored");
 
   async function loadResumes() {
@@ -40,13 +43,12 @@ export default function ResumesPage() {
     const data = await apiCall("/resumes");
     setResumes(data.resumes);
     setLoading(false);
-    
   }
 
   useEffect(() => {
     loadResumes();
   }, []);
-  
+
   async function handleDownload(resumeId: string) {
     const res = await fetch(`${API_URL}/resumes/${resumeId}/download`, {
       headers: { Authorization: `Bearer ${API_KEY}` },
@@ -93,40 +95,49 @@ export default function ResumesPage() {
     setRoles(updated);
   }
 
-async function handleGenerate() {
-  setUploading(true);
-  setMessage(null);
-  try {
-    // Filter out any entries where required fields are still empty
-    const validEducation = education.filter((e) => e.degree.trim() && e.institution.trim());
-    const validRoles = roles.filter((r) => r.title.trim() && r.context.trim());
-
-    if (validEducation.length === 0 || validRoles.length === 0) {
-      setMessage("Please fill in at least one complete education entry and one role/project.");
-      setUploading(false);
-      return;
-    }
-
-    await apiCall("/resumes/generate", {
-      method: "POST",
-      body: JSON.stringify({
-        full_name: fullName,
-        email,
-        phone,
-        linkedin_url: linkedinUrl,
-        portfolio_url: portfolioUrl,
-        education: validEducation,
-        roles: validRoles,
-      }),
-    });
-    setMessage("Resume generation started — refresh in a few seconds.");
-    setShowForm(false);
-  } catch {
-    setMessage("Generation failed. Check all fields are filled in.");
-  } finally {
-    setUploading(false);
+  function updateCertificate(index: number, field: keyof Certificate, value: string) {
+    const updated = [...certificates];
+    updated[index] = { ...updated[index], [field]: value };
+    setCertificates(updated);
   }
-}
+
+  async function handleGenerate() {
+    setUploading(true);
+    setMessage(null);
+    try {
+      // Filter out any entries where required fields are still empty
+      const validEducation = education.filter((e) => e.degree.trim() && e.institution.trim());
+      const validRoles = roles.filter((r) => r.title.trim() && r.context.trim());
+      const validCertificates = certificates.filter((c) => c.name.trim());
+
+      if (validEducation.length === 0 || validRoles.length === 0) {
+        setMessage("Please fill in at least one complete education entry and one role/project.");
+        setUploading(false);
+        return;
+      }
+
+      await apiCall("/resumes/generate", {
+        method: "POST",
+        body: JSON.stringify({
+          full_name: fullName,
+          email,
+          phone,
+          linkedin_url: linkedinUrl,
+          portfolio_url: portfolioUrl,
+          target_position: targetPosition,
+          education: validEducation,
+          roles: validRoles,
+          certificates: validCertificates,
+        }),
+      });
+      setMessage("Resume generation started — refresh in a few seconds.");
+      setShowForm(false);
+    } catch {
+      setMessage("Generation failed. Check all fields are filled in.");
+    } finally {
+      setUploading(false);
+    }
+  }
 
   const inputClass = "bg-[#0F1419] border border-[#2A3038] rounded-md px-3 py-2 text-sm w-full";
 
@@ -160,6 +171,19 @@ async function handleGenerate() {
           {showForm && (
             <div className="space-y-6">
               <div>
+                <p className="text-xs uppercase tracking-wide text-[#4C8DFF] mb-2">Target Position</p>
+                <input
+                  placeholder="e.g. AI/ML Backend Engineer"
+                  value={targetPosition}
+                  onChange={(e) => setTargetPosition(e.target.value)}
+                  className={inputClass}
+                />
+                <p className="text-xs text-[#8A9099] mt-1">
+                  Used to tailor your summary and prioritize the most relevant skills. Leave blank to let DevMind infer it from your tracked work.
+                </p>
+              </div>
+
+              <div>
                 <p className="text-xs uppercase tracking-wide text-[#4C8DFF] mb-2">Contact</p>
                 <div className="grid grid-cols-2 gap-3">
                   <input placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputClass} />
@@ -191,9 +215,28 @@ async function handleGenerate() {
 
               <div>
                 <div className="flex justify-between items-center mb-2">
+                  <p className="text-xs uppercase tracking-wide text-[#4C8DFF]">Certificates (optional)</p>
+                  <button
+                    onClick={() => setCertificates([...certificates, { name: "", issuer: "", date: "" }])}
+                    className="text-xs px-2 py-1 rounded border border-[#2A3038]"
+                  >
+                    + Add certificate
+                  </button>
+                </div>
+                {certificates.map((cert, i) => (
+                  <div key={i} className="grid grid-cols-3 gap-3 mb-2">
+                    <input placeholder="Certificate name" value={cert.name} onChange={(e) => updateCertificate(i, "name", e.target.value)} className={inputClass} />
+                    <input placeholder="Issuer" value={cert.issuer} onChange={(e) => updateCertificate(i, "issuer", e.target.value)} className={inputClass} />
+                    <input placeholder="Date" value={cert.date} onChange={(e) => updateCertificate(i, "date", e.target.value)} className={inputClass} />
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-2">
                   <p className="text-xs uppercase tracking-wide text-[#4C8DFF]">Experience / Projects</p>
                   <button
-                   onClick={() => setRoles([...roles, { title: "", context: "", start_date: "", end_date: "Present", type: "project" }])}
+                    onClick={() => setRoles([...roles, { title: "", context: "", start_date: "", end_date: "Present", type: "project" }])}
                     className="text-xs px-2 py-1 rounded border border-[#2A3038]"
                   >
                     + Add experience
@@ -203,21 +246,21 @@ async function handleGenerate() {
                   Add each real project or role separately — DevMind will pull matching work from your tracked memories for each one.
                 </p>
                 {roles.map((role, i) => (
-  <div key={i} className="grid grid-cols-5 gap-3 mb-2">
-    <select
-      value={role.type}
-      onChange={(e) => updateRole(i, "type", e.target.value)}
-      className={inputClass}
-    >
-      <option value="project">Project</option>
-      <option value="experience">Experience</option>
-    </select>
-    <input placeholder="Title" value={role.title} onChange={(e) => updateRole(i, "title", e.target.value)} className={inputClass} />
-    <input placeholder="Context (Company / Personal Project)" value={role.context} onChange={(e) => updateRole(i, "context", e.target.value)} className={inputClass} />
-    <input placeholder="Start date" value={role.start_date} onChange={(e) => updateRole(i, "start_date", e.target.value)} className={inputClass} />
-    <input placeholder="End date" value={role.end_date} onChange={(e) => updateRole(i, "end_date", e.target.value)} className={inputClass} />
-  </div>
-))}
+                  <div key={i} className="grid grid-cols-5 gap-3 mb-2">
+                    <select
+                      value={role.type}
+                      onChange={(e) => updateRole(i, "type", e.target.value)}
+                      className={inputClass}
+                    >
+                      <option value="project">Project</option>
+                      <option value="experience">Experience</option>
+                    </select>
+                    <input placeholder="Title" value={role.title} onChange={(e) => updateRole(i, "title", e.target.value)} className={inputClass} />
+                    <input placeholder="Context (Company / Personal Project)" value={role.context} onChange={(e) => updateRole(i, "context", e.target.value)} className={inputClass} />
+                    <input placeholder="Start date" value={role.start_date} onChange={(e) => updateRole(i, "start_date", e.target.value)} className={inputClass} />
+                    <input placeholder="End date" value={role.end_date} onChange={(e) => updateRole(i, "end_date", e.target.value)} className={inputClass} />
+                  </div>
+                ))}
               </div>
 
               <p className="text-xs text-[#8A9099]">
@@ -235,24 +278,24 @@ async function handleGenerate() {
 
         <h2 className="font-medium mb-3">Your resumes</h2>
         {loading && <p className="text-[#8A9099]">Loading...</p>}
-       <div className="space-y-2">
-        {displayResumes.map((r) => (
-        <div key={r.id} className="border border-[#1C2128] rounded-lg p-4 flex justify-between items-center">
-          <div>
-            <p className="font-mono text-sm text-[#4C8DFF] uppercase">{r.source}</p>
-            <p className="text-xs text-[#8A9099]">v{r.version} · {new Date(r.created_at).toLocaleDateString()}</p>
-          </div>
-        {r.source === "generated" && (
-          <button onClick={() => handleDownload(r.id)} className="text-sm px-3 py-1.5 rounded-md border border-[#2A3038]">
-            Download
-          </button>
-        )}
+        <div className="space-y-2">
+          {displayResumes.map((r) => (
+            <div key={r.id} className="border border-[#1C2128] rounded-lg p-4 flex justify-between items-center">
+              <div>
+                <p className="font-mono text-sm text-[#4C8DFF] uppercase">{r.source}</p>
+                <p className="text-xs text-[#8A9099]">v{r.version} · {new Date(r.created_at).toLocaleDateString()}</p>
+              </div>
+              {r.source === "generated" && (
+                <button onClick={() => handleDownload(r.id)} className="text-sm px-3 py-1.5 rounded-md border border-[#2A3038]">
+                  Download
+                </button>
+              )}
+            </div>
+          ))}
+          {!loading && displayResumes.length === 0 && (
+            <p className="text-[#8A9099]">No resumes yet. Upload one above.</p>
+          )}
         </div>
-        ))}
-        {!loading && displayResumes.length === 0 && (
-  <p className="text-[#8A9099]">No resumes yet. Upload one above.</p>
-)}
-      </div>
       </div>
     </main>
   );
