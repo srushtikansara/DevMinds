@@ -2,7 +2,7 @@ import chromadb
 import os
 
 CHROMA_API_KEY= os.getenv("CHROMA_API_KEY")
-
+print(f"DEBUG CHROMA_API_KEY starts with: {repr(CHROMA_API_KEY[:5]) if CHROMA_API_KEY else 'NONE'}")
 if CHROMA_API_KEY:
     client = chromadb.CloudClient(
         api_key=CHROMA_API_KEY,
