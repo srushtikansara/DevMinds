@@ -1,6 +1,16 @@
 import chromadb
+import os
 
-client = chromadb.HttpClient(host="localhost", port=8001)
+CHROMA_API_KEY= os.getenv("CHROMA_API_KEY")
+
+if CHROMA_API_KEY:
+    client = chromadb.CloudClient(
+        api_key=CHROMA_API_KEY,
+        tenant=os.getenv("CHROMA_TENANT"),
+        database=os.getenv("CHROMA_DATABASE"),
+    )
+else:
+    client = chromadb.HttpClient(host=os.getenv("CHROMA_HOST", "localhost"), port=int(os.getenv("CHROMA_PORT", "8001")))
 
 collection = client.get_or_create_collection(name="memmories")
 
