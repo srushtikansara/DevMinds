@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session as DBSession
 from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel
 
+from datetime import datetime, timedelta, timezone 
+
 from app.infrastructure.db.session import SessionLocal, get_db
 from app.infrastructure.db.models import Session as SessionModel, Connector, User , Memory,Recommendation,CareerRecommendation,JobPosting,Resume,SkillEvent,DeveloperEvent,Skill
 from app.infrastructure.embeddings.gemini_embeddings import get_embedding 
@@ -71,6 +73,11 @@ class DraftEmailRequest(BaseModel):
     to: str
     subject: str
     body: str
+
+class CalendarEventRequest(BaseModel):
+    title: str
+    start_iso: str
+    end_iso: str
 
 class NotionLogRequest(BaseModel):
     title: str
@@ -290,8 +297,19 @@ def upload_resume(
     db.add(resume)
     db.commit()
     db.refresh(resume)
-    
-    return {"resume_id": resume.id, "status": "uploaded", "text_length": len(extracted_text)}
+
+    drive_link = None
+    try:
+        from app.infrastructure.drive.drive_client import upload_resume_to_drive
+        drive_link = upload_resume_to_drive(saved_path, file.filename)
+        content = dict(resume.content_json)
+        content["drive_link"] = drive_link
+        resume.content_json = content
+        db.commit()
+    except Exception as e:
+        print(f"Drive upload failed for uploaded resume (non-fatal): {e}")
+
+    return {"resume_id": resume.id, "status": "uploaded", "text_length": len(extracted_text), "drive_link": drive_link}
     
 @router.get("/resumes")
 def list_resumes(user:User = Depends(get_current_user),db:DBSession =Depends(get_db)):
@@ -355,7 +373,11 @@ def get_career_matches(user: User = Depends(get_current_user), db: DBSession = D
     matches = (
         db.query(CareerRecommendation, JobPosting)
         .join(JobPosting, CareerRecommendation.job_postings_id == JobPosting.id)
-        .filter(CareerRecommendation.user_id == user.id, CareerRecommendation.rejected == False)
+        .filter(
+            CareerRecommendation.user_id == user.id,
+            CareerRecommendation.rejected == False,
+            CareerRecommendation.created_at >= datetime.now(timezone.utc) - timedelta(days=14),
+        )
         .order_by(CareerRecommendation.fit_score.desc())
         .all()
     )
@@ -508,6 +530,15 @@ def office_draft_email(body: DraftEmailRequest, user: User = Depends(get_current
         return {"status": "drafted", "draft_id": draft_id}
     except Exception as e:
         raise HTTPException(500, f"Failed to create draft: {str(e)}")
+@router.post("/office/calendar-event")
+def office_calendar_event(body: CalendarEventRequest, user: User = Depends(get_current_user)):
+    from app.infrastructure.calendar.calendar_client import create_learning_block
+    try:
+        event_id = create_learning_block(body.title, body.start_iso, body.end_iso)
+        return {"status": "created", "event_id": event_id}
+    except Exception as e:
+        raise HTTPException(500, f"Failed to create calendar event: {str(e)}")
+
 # --------------------
 @router.post("/learning/path-progress")
 def get_path_progress(skills: list[str], user: User = Depends(get_current_user)):

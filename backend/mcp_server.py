@@ -88,6 +88,15 @@ def draft_email(to:str,subject:str,body:str)-> dict:
         return {"status": "error", "message": str(e)}
     
 @mcp.tool()
+def create_calendar_event(title: str, start_iso: str, end_iso: str) -> dict:
+    """Create a learning block in Google Calendar. Times are ISO 8601 in India time, e.g. 2026-10-31T18:00:00 to 2026-10-31T19:00:00."""
+    try:
+        response = requests.post(f"{API_URL}/office/calendar-event", json={"title": title, "start_iso": start_iso, "end_iso": end_iso}, headers=HEADERS, timeout=TIMEOUT)
+        return response.json()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@mcp.tool()
 def log_to_notion(title:str,content:str) ->dict:
     """Create a new page in the connected Notion database with a title and content."""
     try:

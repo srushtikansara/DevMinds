@@ -20,6 +20,7 @@ def get_drive_service():
 def upload_resume_to_drive(file_path: str, file_name: str):
     service = get_drive_service()
     file_metadata = {'name': file_name}
-    media = MediaFileUpload(file_path, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    mimetype = 'application/pdf' if file_name.lower().endswith('.pdf') else 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    media = MediaFileUpload(file_path, mimetype=mimetype)
     uploaded = service.files().create(body=file_metadata, media_body=media, fields="id, webViewLink").execute()
     return uploaded["webViewLink"]
